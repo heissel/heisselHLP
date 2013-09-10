@@ -685,12 +685,19 @@ sub getHiLo {
 sub getSetup {
     use strict;
     my $c = @_; die "Found $c elements to getSetup(), should be 9\n" unless ($c == 9);
-    my ($suCond, $dir, $h_o, $h_h, $h_l, $h_c, $h_v, $day, $dindex) = @_;
+    my ($suCond, $dir, $h_o, $h_h, $h_l, $h_c, $h_v, $day, $dix) = @_;
     my %openp = %$h_o;  my %closep = %$h_c;  my %maxp = %$h_h;  my %minp = %$h_l;   my %volume = %$h_v;
     my @d = sort keys %closep;
     my $n = @d;
-    die "$day != $d[$dindex]\n" unless ($day eq $d[$dindex]);
+    die "$day != $d[$dix]\n" unless ($day eq $d[$dindex]);
     
+    if ($suCond =~ /SMA(\d+)([fxc])(\d+.?\d*)/) { # SMA slope up for long, down for short
+
+    }
+    if ($suCond =~ /EMA(\d+)([fxc])(\d+.?\d*)/) { # EMA slope up for long, down for short
+        $per = $1; 
+        @ma = emaArray(\%closep, $per);
+    }
 }
 
 # ($setupOK, $donotenter, $stopBuy,$stopBuyS) = getSetupCondition($tick, $system, $suCond, $h_d, $h_i, $h_o, $h_h, $h_l, $h_c, $day, $setupOld);
