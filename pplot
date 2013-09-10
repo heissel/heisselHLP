@@ -1,0 +1,182 @@
+#!/usr/bin/perl -I/home/tdall/Execs
+
+use PGPLOT;
+use Getopt::Std;
+use Astro::FITS::CFITSIO;
+
+require "utils.pl";
+
+getopts('Ax:y:spl:u:fc:d:Hn:o:w:a');      
+# -s : symbol plotting
+# -p : make a ps file
+# -u : upper limit in x
+# -l : lower limit in x
+# -a : make ascii file of plotted region
+# -c : central x-value
+# -d : delta x-value (range=2xd)
+# -f : file is a fits file (a spectrum)
+# -H : file is HARPS CCF fits file (plot band 73)
+# -o : order to plot (don't give for 1D spectra or HARPS CCF's)
+# -w : wavelength zeropt for -o plots
+# -n : normalize (crude)
+# -A : file is ascii 2-col file
+
+#  plots two columns in a file against each other using PGPLOT
+
+&handle_plot_options;
+
+# now the plotting
+$font = 2;
+$linewidth = 2;
+$charheight = 1.6;
+pgbegin(0,$device,1,1); # Open plot device 
+pgscf($font); # Set character font 
+pgslw($linewidth); # Set line width 
+pgsch($charheight); # Set character height 
+
+pgsci(1);  # default colour
+$symbol = 17;
+
+# find low and high in x and y, ...
+&get_lows_and_highs;
+
+# ... add a little extra in both ends
+$mean = ( $yplot_hig - $yplot_low ) * 0.02;
+$yplot_hig += $mean;
+$yplot_low -= $mean;
+
+pgenv($xplot_low, $xplot_hig, $yplot_low, $yplot_hig, 0, 0);
+pglabel("\\gl [\\A]", "", "");
+if ($opt_s) {  # symbol plotting
+    pgsci(5);
+    pgpoint($nume,\@x,\@y,$symbol);    # plot the points    
+} else {
+    pgsci(15);                            # color 15 = light gray
+    pgline($nume,\@x,\@y);                   # plot the spectrum    
+}
+
+pgmtxt('r', 1.1, 0.0, 0.0, "(xcol $opt_x, ycol $opt_y)") unless ($opt_f);
+pgend;
+
+&write_ascii if ($opt_a);
+
+
+#
+# subroutines
+#
+
+sub handle_plot_options {
+    $file = @ARGV;
+    unless ( ( ($opt_x && $opt_y) || $opt_f || $opt_H || $opt_o) && $file == 1) {
+	print "plot.pl -x<col> -y<col> <file>\n\n";
+    }
+    if ($opt_x) {
+	$xcol = $opt_x - 1;  $ycol = $opt_y - 1;  
+    }
+    if ($opt_w) {
+	$wloffset = $opt_w;
+    } else {
+	$wloffset = 0.0;
+    }
+    
+    $file = shift @ARGV;
+
+    if ($opt_p) {
+	$device = "outplot.ps/PS";
+    } else {
+	$device = "/XSERVE";
+    }
+
+    @x = ();  @y = ();
+
+    if ($opt_o) {
+	$x = \@x; $y = \@y;
+	($x, $y) = read_fits_order($opt_o, $wloffset, $file);
+	@x = @$x; @y = @$y;
+    } elsif ($opt_f) {
+	$x = \@x; $y = \@y;
+	($x, $y) = read_fits_spectrum($file);
+	@x = @$x; @y = @$y;
+    } elsif ($opt_H) {
+	$x = \@x; $y = \@y;
+	($x, $y) = read_fits_ccf($file);
+	@x = @$x; @y = @$y;
+    } elsif ($opt_A) {
+	&read_ascii;
+    } else {
+	die "must give -f|-A|-o|-H\n";
+    }
+
+    $nume = @x;   # number of elements
+    if ($nume <= 2) {
+	print "too few elements...\n";
+	exit;
+    }
+
+    if ($opt_n) {
+	@newy = div_array( \@y, $opt_n );
+	@y = @newy;
+    }
+}
+
+sub get_lows_and_highs {
+    if ($opt_u && $opt_l) {
+	$xplot_hig = $opt_u if ($opt_u);
+	$xplot_low = $opt_l if ($opt_l);
+	@ycut=();
+      LOOP: for ($i = 0; $i < $nume; $i++) {
+	  if ($x[$i] > $xplot_low) {
+	      push @ycut, $y[$i];
+	  }
+	  last LOOP if $x[$i] > $xplot_hig;
+      }
+	($yplot_low, $yplot_hig) = low_and_high(@ycut);  # dereferences the array pointer
+    } elsif ($opt_c && $opt_d) {
+	$xplot_hig = $opt_c + $opt_d;
+	$xplot_low = $opt_c - $opt_d;
+	@ycut=();
+      LOOP2: for ($i = 0; $i < $nume; $i++) {
+	  if ($x[$i] > $xplot_low) {
+	      push @ycut, $y[$i];
+	  }
+	  last LOOP2 if $x[$i] > $xplot_hig;
+      }
+	($yplot_low, $yplot_hig) = low_and_high(@ycut);  # dereferences the array pointer
+    } else {
+	($xplot_low, $xplot_hig) = low_and_high(@x);  # dereferences the array pointer
+	$mean = ( $xplot_hig - $xplot_low ) * 0.02;
+	$xplot_hig += $mean;
+	$xplot_low -= $mean;
+	($yplot_low, $yplot_hig) = low_and_high(@y);  # dereferences the array pointer
+    }
+}
+
+sub write_ascii {
+    open OUT, ">plot.asc" or die "bbbb37rt whrg s s...";
+
+    for ($i = 0; $i <= $nume; $i++) {
+	if ($x[$i] > $xplot_low) {
+	    print OUT "$x[$i]   $y[$i]\n";
+	}
+	last if $x[$i] > $xplot_hig;
+    }
+
+    close OUT;
+}
+
+
+sub read_ascii {
+    open IN, "<$file" or die "wwweerrddd...$!";
+
+    while ( $in = <IN> ) {
+	chomp( $in );
+	$in =~ s/^\s+//s;
+	@in = split /\s+/, $in;
+	if ($in[$xcol] !~ /[a-zA-Z]/ && $in[$ycol] !~ /[a-zA-Z]/) {
+	    @x = (@x, $in[$xcol]);
+	    @y = (@y, $in[$ycol]);
+	}
+    }
+    
+    close IN;
+}

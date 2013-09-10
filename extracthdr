@@ -1,0 +1,110 @@
+#!/usr/bin/perl -w
+
+#use strict;
+
+my (
+    @intohash, @entry,
+    %params,
+    $dum, $infile, $ent, $pos1, $pos2, $output,
+    );
+
+# begin documentation
+=pod
+
+=head1 extracthdr
+
+extracts FITS-type parameters from text files
+
+=head2 Syntax
+
+extracthdr F<file(s)>
+
+=head2 Required files
+
+F<param.header>
+
+=head2 Description
+
+Extracts information from the headers of ascii text files, which have been
+made from the header part of FITS files, 
+converted to pure text via IDL's READFITS-routine, via IRAF's wtextimage
+task, or with B<rfitshdr>. The header information is contained in files, one for each image. You 
+must specify the filenames on the command line.
+L<another>
+You also have to give a file named F<param.header>, containing (part of) the name
+of the header field and the filename of the resulting parameter file on each line.
+
+Here is an example of a F<param.header> file:                  
+
+C<
+        IRAF-MAX imx
+        TM_START tm1
+        TM_END tm2
+>
+
+The output files will be one-column files with one value per spectrum. The above 
+example would thus give files called F<imx.par>, F<tm1.par> and F<tm2.par>, all
+containing one value of the corresponding parameter per spectrum/input-file.
+
+=head2 Status
+
+30-06-2000: Modified to include IRAF generated text files, and to take the file
+names from the command line. Cleaned up a bit.
+
+POD created on 22-03-2000. This version requires the header-info files to
+end on F<.hdr> but this might change in future versions to somthing smarter.
+
+=cut
+# end of documentation
+    
+sub bail {
+    die "\nperldoc extracthdr\n\nfor more information.\n";
+}
+
+unless (@ARGV) {
+    print "No files given!\n";
+    &bail();
+}
+
+if (-e "param.header") {
+    open PAR, "param.header";
+} else {
+    print "Missing file: param.header\n";
+    &bail();
+}
+
+while (<PAR>) {  # read each line of the file and split it into a key and a value
+    @intohash = split;
+    $params{$intohash[0]} = $intohash[1];
+}
+close PAR;
+
+@entry = keys %params;  # entry is also used as filehandle
+
+foreach $dum (@entry) {
+    open($dum, ">$params{$dum}.par") or  # open all parameterfiles
+	die "Could not open $params{$dum}.par: $!";
+}
+
+foreach $infile (@ARGV) {   # loop through all files and ...
+    open(INFILE, "$infile") || die "error opening $infile: $!";
+    print "Extracting from $infile\n";
+    INDLABEL:while (<INFILE>) {   # ... take in a line from the file and ...
+	foreach $ent (@entry) {
+	    if (/^\s*$ent\W/) {   # ... check if this matches an entry
+		$pos1 = index($_,"=") + 1;
+		$pos2 = index($_,"/");
+		$output = substr($_, $pos1, $pos2 - $pos1);
+		$output =~ tr/ //d;
+		select ($ent);    # if it does, then write it to appropriate file ... 
+		print "$output\n";
+		select (STDOUT);
+		next INDLABEL;    # ... and jump to the next entry.
+	    }
+	}
+    }
+
+    close INFILE || die "error closing $infile\n";
+
+}
+

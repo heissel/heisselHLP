@@ -1,0 +1,312 @@
+#!/usr/bin/perl -w
+
+use Tk;
+my $pi = 3.1415926536;
+my $mw = MainWindow->new;
+$mw -> title("TurtleTk");
+
+# sets size of drawing area
+$turt_w = 600;
+$turt_h = 600;
+
+# setting initial starting point in the chosen center of drawing area
+$x_trans = $turt_w/2;
+$y_trans = $turt_h/2;
+
+# setting default starting values for the entry fields
+&read_defaults;
+$x_start = 0;
+$y_start = 0 - $startl/2;
+$x_init_start = $x_start;
+$y_init_start = $y_start;
+
+# first define the main frames to contain the widgets
+$fr_top = $mw -> Frame(
+#		       -relief => 'groove',
+		       -borderwidth => 2,
+		       ) -> grid(
+				 -sticky => 'w'
+				 );
+$fr_inc = $mw -> Frame(
+#		       -relief => 'groove',
+		       -borderwidth => 2,
+		       ) -> grid(
+				 -sticky => 'w'
+				 );
+$fr_ang = $mw -> Frame(
+#		       -relief => 'groove',
+		       -borderwidth => 2,
+		       ) -> grid(
+				 -sticky => 'w'
+				 );
+$fr_but = $mw -> Frame(
+#		       -relief => 'groove',
+		       -borderwidth => 2,
+		       ) -> grid(
+				 -sticky => 'w'
+				 );
+# defining all the widgets to be used
+$e_startl = $fr_top -> Entry(
+			     -textvariable => \$startl,
+			     );
+$l_startl = $fr_top -> Label(
+			     -text => "Starting length",
+			     -justify => 'left',
+			     );
+$cb_zero = $fr_inc -> Radiobutton(
+				  -text => "zero",
+				  -anchor => 'w',
+				  -justify => 'left',
+				  -value => 0,
+				  -variable => \$incr_l,
+				  -command => \&state_of_value,
+				  );
+$cb_const = $fr_inc -> Radiobutton(
+				   -text => "constant, ",
+				   -anchor => 'w',
+				   -justify => 'left',
+#			       -value => $incr,
+				   -value => 1,
+				   -variable => \$incr_l,
+				   -command => \&state_of_value,
+				   );
+$cb_sine = $fr_inc -> Checkbutton(
+				  -text => "sinusoidal",
+				  -anchor => 'w',
+				  -justify => 'left',
+				  -variable => \$sin_incr,
+				  -command => \&state_of_sin,
+				  );
+$l_incrl = $fr_inc -> Label(
+			    -text => "increment is",
+			    -justify => 'left',
+			    );
+$e_incr = $fr_inc -> Entry(
+			   -textvariable => \$incr,
+			   );
+$l_incr = $fr_inc -> Label(
+			   -text => "value",
+			   -justify => 'left',
+			   );
+$e_amp = $fr_inc -> Entry(
+			  -textvariable => \$amp,
+			  );
+$l_amp = $fr_inc -> Label(
+			  -text => "amplitude",
+			  -justify => 'left',
+			  );
+$e_per = $fr_inc -> Entry(
+			  -textvariable => \$per,
+			  );
+$l_per = $fr_inc -> Label(
+			  -text => "period",
+			  -justify => 'left',
+			  );
+$e_starta = $fr_ang -> Entry(
+			     -textvariable => \$starta,
+			     );
+$l_starta = $fr_ang -> Label(
+			     -text => "starting angle",
+			     -justify => 'left',
+			     );
+$e_incra = $fr_ang -> Entry(
+			    -textvariable => \$incra,
+			    );
+$l_incra = $fr_ang -> Label(
+			    -justify => 'left',
+			    -text => "increment",
+			    );
+$e_steps = $fr_ang -> Entry(
+			    -textvariable => \$steps,
+			    );
+$l_steps = $fr_ang -> Label(
+			    -text => "number of steps",
+			    -justify => 'left',
+			    );
+$b_run = $fr_but -> Button(
+			   -text => "Run",
+			   -command => \&run_turtle,
+			   );
+$b_done = $fr_but -> Button(
+			    -text => "Done",
+			    -command => \&my_exit,
+			    );
+$b_defaults = $fr_but -> Button(
+				-text => "Defaults",
+				-command => \&read_defaults,
+				);
+$b_clear = $fr_but -> Button(
+			     -text => "Clear",
+			     -command => \&clear_drawarea,
+			     );
+$b_cont = $fr_but -> Button(
+			    -text => "Continue",
+			    -command => \&continue,
+			    );
+$dummy = $fr_inc -> Label(
+			  -text => " ",
+			  );
+
+# pack all the widgets using grid()
+
+$l_startl -> grid($e_startl,"x","x",
+		  -sticky => 'w');
+$l_incrl -> grid($cb_zero,"x","x",
+		 -sticky => 'w');
+$dummy -> grid($cb_const,$l_incr,$e_incr,
+	       -sticky => 'w');
+$dummy -> grid($cb_sine,$l_amp,$e_amp,$l_per,$e_per,
+	       -sticky => 'w');
+$l_starta -> grid($e_starta,$l_incra,$e_incra,
+		  -sticky => 'w');
+$l_steps -> grid($e_steps,"x","x",
+		 -sticky => 'w');
+$b_run -> grid($b_cont,$b_defaults,$b_clear,$b_done,
+	       -sticky => 'w');
+
+# configure the wigets after packing
+$e_incr -> configure(-state => 'disabled');
+$b_cont -> configure(-state => 'disabled');
+
+MainLoop;
+
+
+
+# end of main 
+#
+# start of subroutines and functions
+
+sub my_exit {
+    exit;
+}
+
+sub read_defaults {
+    $incr = 1.0;
+    $startl = 90.0;
+    $starta = 0;
+    $incra = 65;
+    $steps = 30;
+    $incr_l = 0;
+    $amp = 10;
+    $per = 6;
+}
+
+sub clear_drawarea {
+    if (Exists($turtle)) {
+	$draw -> delete("all");
+	$x_start = $x_init_start;
+	$y_start = $y_init_start;
+	$b_cont -> configure(-state => 'disabled');
+    }
+}
+
+sub run_turtle {
+# initialize if 'Run'
+# raise/create the drawing area.
+    unless (Exists($turtle)) {
+	$turtle = $mw -> Toplevel(
+				  -height => $turt_h,
+				  -width => $turt_w,
+				  );
+	$turtle -> title("TurtleTk - the graphics");
+	$turtle -> geometry("$turt_w".'x'."$turt_h+0+0");
+	$draw = $turtle -> Canvas(
+				  -relief => 'groove',
+				  -background => "#ffffff",
+				  -height => $turt_h,
+				  -width => $turt_w,
+				  );
+	$draw -> pack();
+	&rebind_move;
+    } else {
+	$turtle -> deiconify();
+	$turtle -> raise();
+    }
+    $x_old = $x_start;
+    $y_old = $y_start;
+    $startl_incr = $startl;
+    $starta_incr = $starta*$pi/180;
+    $incra_rad = $incra*$pi/180;
+    &drawit;
+}
+
+sub continue {
+# just use the old starting values if 'Continue'
+    $turtle -> deiconify();
+    $turtle -> raise();
+    &drawit;
+}
+
+sub drawit {
+    $lgth = $incr * $incr_l;
+# the loop through all the steps, drawing a line segment each time
+    for ($i = 1; $i <= $steps; $i++) {
+	if ($sin_incr) {
+	    if ($incr_l) {
+		$startl_incr += ($lgth + $amp * sin(2*$pi*$i/$per));
+	    } else {
+		$startl_incr += $amp * sin(2*$pi*$i/$per);
+	    }
+	} else {
+	    $startl_incr += $lgth;
+	}
+	$starta_incr += $incra_rad;
+	$x_new = $x_old + $startl_incr * cos($starta_incr);
+	$y_new = $y_old + $startl_incr * sin($starta_incr);
+	$draw -> createLine($x_old+$x_trans,$y_trans-$y_old,$x_new+$x_trans,$y_trans-$y_new);
+	$x_old = $x_new;
+	$y_old = $y_new;
+    }
+# enable 'Continue'
+    $b_cont -> configure(-state => 'normal');
+}
+
+sub moveit {
+    my ($draw,$x,$y) = @_;
+    $x_move_start = $draw -> canvasx($x);
+    $y_move_start = $draw -> canvasy($y);
+    $draw -> createText($turt_w/4,10,
+			-text => "again to move, right to cancel",
+			-tags => "text",
+			);
+    $draw -> Tk::bind("<Button-1>",[\&endofmove,Ev('x'),Ev('y')]);
+    $draw -> Tk::bind("<Button-3>", \&cancelmove);
+}
+
+sub cancelmove {
+    $draw -> delete("text");
+    &rebind_move;
+}
+
+sub endofmove {
+    my ($draw,$x,$y) = @_;
+    $x = ($draw -> canvasx($x)) - $x_move_start;
+    $y = ($draw -> canvasy($y)) - $y_move_start;
+    $draw -> delete("text");
+    $draw -> move("all",$x,$y);
+    $x_old += $x;
+    $y_old -= $y;
+    &rebind_move;
+}
+
+sub rebind_move {
+    $draw -> Tk::bind("<Button-1>",[\&moveit,Ev('x'),Ev('y')]);
+}
+
+sub state_of_value {
+    if ($incr_l) {
+	$e_incr -> configure(-state => 'normal');
+    } else {
+	$e_incr -> configure(-state => 'disabled');
+    }
+}
+
+sub state_of_sin {
+    if ($sin_incr) {
+	$e_amp -> configure(-state => 'normal');	
+	$e_per -> configure(-state => 'normal');
+    } else {
+	$e_amp -> configure(-state => 'disabled');	
+	$e_per -> configure(-state => 'disabled');
+    }
+}

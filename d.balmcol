@@ -1,0 +1,52 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+
+
+getopts('c:n:') || &bail;      # $opt_c is number of column in combined line to write
+                                   # $opt_n is number of lines to treat as single line
+
+
+sub bail {
+    print "Missing -n or -c option!\n";
+    exit(0);
+}
+
+if ($opt_c) {
+    $col = $opt_c - 1;
+} else {
+    &bail();
+}
+unless ($opt_n) {
+    &bail();
+}
+
+
+# read in the file
+foreach (@ARGV) {
+
+    open IN, "<$_";
+
+    do {
+
+	$this_line = "";
+	$space = "";
+	for ( $i = 0 ; $i < $opt_n ; $i++ ) {
+	    chomp( $in = <IN> ) || exit();
+	    $this_line = $this_line.$space.$in;
+	    $space = " ";
+		}
+	$this_line =~ s/^\s+//s;
+	@in = split /\s+/, $this_line;
+
+	print "$in[$col]\n";
+
+    } while $in;
+
+    close IN;
+
+}
+
+
+# combines two or more rows/lines in a file into a single line and prints one entry from this line.

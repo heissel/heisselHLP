@@ -1,0 +1,18 @@
+06-07-2000:
+Program added:
+	rfitshdr
+
+06-07-2000:
+Symbolic link to current version of Ix-Balmer included (ix.balmer).
+
+03-07-2000:
+All files in this directory are programs that have documentation included.
+No other half-finished programs should be found here.
+
+Programs at this date:
+	extracthdr
+	irafasc2asc
+
+To read documentation on the programs use:
+
+perldoc program_name

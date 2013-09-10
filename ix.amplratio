@@ -1,0 +1,52 @@
+#!/usr/bin/perl 
+#-w
+
+
+
+sub bail {
+    exit(0);
+}
+
+
+
+# must be exactly two filenames on line
+@inarr = @ARGV;
+$file1 = shift @inarr;
+$file2 = shift @inarr;
+if (@inarr) {
+    $output = shift @inarr;
+}
+
+open FILE1, "<$file1" || die "?1";
+open FILE2, "<$file2" || die "?2";
+if ($output) {
+    open OUT, ">$output" || die "??";
+}
+
+# take line by line and construct the ratios
+
+while ($in1 = <FILE1>) {
+    $in2 = <FILE2>;
+    if ($in1 =~ /\(/ || $in2 =~/\(/) {
+	print "parenthesis error!\n";
+#	&bail();
+    } else {
+	($mode1, $frq1, $ampl1, $phas1) = split /\s+/, $in1;
+	($mode2, $frq2, $ampl2, $phas2) = split /\s+/, $in2;
+	if ($frq1 != $frq2) {
+	    print "mismatch!\n";
+	    &bail();
+	} else {
+	    $ratio = $ampl1 / $ampl2;
+	    $phasdif = $phas1 - $phas2;
+	    print "$mode1:  $frq1   $ratio   $phasdif\n";
+	    if ($output) {
+		print OUT "$frq1   $ratio   $phasdif\n";
+	    }
+	}
+    }
+}
+
+close FILE1;
+close FILE2;
+close OUT if $output;

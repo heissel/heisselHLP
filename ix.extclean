@@ -1,0 +1,107 @@
+#!/usr/bin/perl 
+
+# will extract amplitudes from the file(s) specified on the command line. Uses
+# the file 'freq.inp' to determine which frequencies to look for.
+# The file will typically be output from clean.pl and thus contain the
+# stable frequencies at the end.
+# begin documentation
+=pod
+
+=head1 ix.extclean
+
+=head2 Syntax
+
+ix.extclean F<files>
+
+=head2 Options
+
+none
+
+=head2 Required files
+
+F<freq.inp> lists the frequencies for which to extract amplitudes.
+
+=head2 Description
+
+Extract the stable amplitude and phase information from F<clean.log>-files, created
+by B<ix.clean>. Writes it to files ampl_F<ext> if input F<files> are called
+clean_F<ext>, otherwise only one file at a time, output named F<ampl_out>.
+
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+# end of documentation
+
+use Math::Trig;
+
+# checks for command line argument and exits with help message if missing
+
+bail_out() unless (@ARGV);
+
+# reads and inverts freq.inp
+
+open FRQ,"freq.inp" || die "Could not open $!";
+$dummy = <FRQ>;
+@frq = split(/\s+/,$dummy);
+close FRQ;
+@frq = reverse @frq;
+
+foreach (@ARGV) {
+
+# reads the file 'clean_...' (or whatever...) into array and
+# inverts the array; we want the last (the stable) instance of each frequency.
+
+    open CLEAN,"$_";
+    @clean = <CLEAN>;
+    close CLEAN;
+    @clean = reverse @clean;
+
+# prepare the output file - named by the extension of
+# the input file e.g.  clean_22 -> ampl_22
+
+    if (/clean(.+)/) {
+	$outfile = "ampl$1";
+	$filenameext = $1;
+    } else {
+	$outfile = ">ampl_out";
+	$filenameext = $_;
+    }
+    open OUTAMP,">$outfile" || die "Cannot create $outfile\n";
+    print "$_  -> $outfile.";
+
+# now search for each frquency, skipping to the next when found 
+
+  LINJE:
+    foreach $linje (@clean) {
+	last LINJE if $linje =~ /Gennemloeb/; # reached this word, so we know we are through all lines.
+
+      FREKVENS:
+	foreach $frq (@frq) {
+
+	    if ($linje =~ /$frq/) {
+		@amp = split(/\s+/,$linje);
+		# pos4 is amplitude, pos5 is sin and cos terms in parenthesis: (a_s,a_c)
+		$amp[5] =~ tr/()//d;
+		($a_s,$a_c) = split /,/, $amp[5];
+		$phi = atan($a_c/$a_s) * 180.0 / pi;
+		print OUTAMP "$frq  $amp[4]  $phi  $filenameext\n";
+		last FREKVENS; # we found the frequency, no need to check the rest, so take next line.
+	    }
+
+	}
+    }
+    close OUTAMP;
+    print " Done.\n";
+}
+
+
+sub bail_out {
+    print "\nUsage:  ix.extclean <file1> [<file2> ...]\n";
+    print "         will extract amplitudes from clean.log like\n";
+    print "         files and make ampl<ext> files where <ext> is\n";
+    print "         the clean-file extension\n";
+    exit;
+}

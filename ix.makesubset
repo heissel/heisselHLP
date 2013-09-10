@@ -1,0 +1,104 @@
+#!/usr/bin/perl
+
+# opens data file and time file (from command line) and
+# generates new files; eq, time.sec, pts.night
+
+use Getopt::Std;
+
+getopts('t:d:p:f:') || err_message();
+
+@dum = split(/\s+/,`date`);
+@d = split(/:/,$dum[3]);
+srand int($d[0]*$d[2]+$dum[2]*$d[1]);
+
+
+$old_times = $opt_t;
+$old_data = $opt_d;
+$old_pts = $opt_p;
+
+if ($opt_f) {
+    $percent = $opt_f;
+    err_message() if ($percent < 0.0 || $percent > 100.0);
+} else {
+    err_message();
+}
+
+
+if ($opt_t) {
+    open OLDTIM, "<$old_times" || die "No $old_times\n";
+    @oldtim = <OLDTIM>;
+    close OLDTIM;
+} else {
+    err_message();
+}
+
+$totnum = @oldtim;
+
+if ($opt_d) {
+    open OLDDAT, "<$old_data" || die "No $old_data\n";
+    @olddat = <OLDDAT>;
+    close OLDDAT;
+} else {
+    err_message();
+}
+
+# pts.night if it is present
+if ($opt_p) {
+    open OLDPTS, "<$old_pts" || die "No $old_pts\n";
+    @oldpts = <OLDPTS>;
+    close OLDPTS;
+} else {
+    @oldpts = ($totnum);
+}
+
+# all old params read in, now for the new files:
+
+open DAT, ">eq" || die "Can't open eq\n";
+open TIM, ">time.sec" || die "Can't open time.sec\n";
+open PTS, ">pts.night" || die "Can't open pts.night\n";
+
+foreach (@oldpts) {
+    $pts = 0;
+    chomp($_);
+    for ($i = 1; $i <= $_; $i++) {
+	$eq_val = shift @olddat;
+	$ti_val = shift @oldtim;
+	if (100.0*rand() <= $percent) {
+	    print DAT "$eq_val";
+	    print TIM "$ti_val";
+	    $pts++;
+	}
+    }
+    print PTS "$pts\n";
+    print "$_ -> $pts\n";
+}
+
+close PTS;
+close TIM;
+close DAT;
+
+exit 0;
+
+
+sub norm_dist_noise {
+    my ($noise, $sig,$v1,$v2,$r,$fac);
+
+    ($sig) = @_;
+
+    do {
+	$v1 = 2.*rand(1.) - 1.;
+	$v2 = 2.*rand(1.) - 1.;
+	$r = $v1**2 + $v2**2;
+	redo if ($r >= 1. || $r == 0.);
+	$noise = $v1 * sqrt(-2.*log($r)/$r) * $sig;
+	return $noise;
+    }
+}
+
+
+
+sub err_message {
+    print "usage:  ix.makesubset -t<timefile> -d<datafile> -f<percent> -p<pts.night>\n";
+    exit 0;
+}    
+

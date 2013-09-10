@@ -1,0 +1,388 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+#use strict 'vars';
+
+my $min_to_sec = 60.00;
+my $hrs_to_sec = 3600.00;
+my $day_to_sec = 86400.00; 
+my (
+    $zero_ut, $zero_year, $zero_mth, $zero_day,
+    $in, $yy, $mm, $day, $ss,
+    );
+
+getopts('c:a:s:r:w:t:Nnozpv') || &bail;          # $opt_c is coulumn number to be evaluated
+                                     # $opt_a is approximate value of the mean
+                                     # $opt_s is sigma clipping
+                                     # $opt_w is file name of resulting column
+                                     # $opt_N means print S/N ratios instead of sigmas
+                                     # $opt_n looks for pts.night file
+                                     # $opt_r takes only this range in the column
+                                     # $opt_o calculates 'other'-scatter
+                                     # $opt_t is column with times (necs. for clipping)
+                                     # $opt_z means ignore zeroes in calculating the mean
+                                     # $opt_p prints the entire original line. Only useful with -w
+                                     # $opt_v turns verbose off, outputs only the mean
+
+# find mean of one column ($opt_c) in files (@ARGV) and output:   mean, scatter, deviates
+
+# begin documentation
+=pod
+
+=head1 ix.findmean
+
+=head2 Syntax
+
+findmean [B<-c> I<col>] [B<-N>] [B<-a> I<aprx_mean>] [B<-s> I<clip>] [B<-w> F<new_file> [B<-p>]]
+[B<-n>] [B<-r> I<from>:I<to>] [B<-o>] [B<-t> I<timecol>] [B<-z>]  F<files>
+
+=head2 Description
+
+Finds mean and scatter of column number I<col> in F<files>. 
+
+=head2 Options
+
+=over 3
+
+=item B<-c> I<col>
+
+The column for which to find the mean. If omitted defaults to 1.
+
+=item B<-N>
+
+Prints rms-scatter and point-to-point-scatter in S/N format.
+
+=item B<-a> I<aprx_mean>
+
+Specify an approximate value of the mean to catch very deviant points. If 
+actual mean deviates by factor of 3, then points deviating by factor of 10
+will be rejected and new mean and scatter calculated.
+
+=item B<-s> I<clip>
+
+Size of sigma-clipping. New mean and scatter calculated after clipping.
+
+=item B<-r> I<from>:I<to>
+
+Takes only the range I<from> -- I<to> in the column.
+
+=item B<-n>
+
+Looks for a F<pts.night> file to calculate in specified subintervals. Writes a new file
+F<pts.night.new> if -s is also given.
+
+=item B<-o>
+
+Calculates scatter difference between rms and point-to-point
+
+=item B<-w> F<new_file>
+
+Writes the column to F<new_file> after any B<-a>, B<-r> or B<-s> corrections. 
+If B<-t> is specified, then also the time is written.
+
+=item B<-p>
+
+Prints the entire original line to the new file. Only in effect with the B<-w> option.
+
+=item B<-t> I<timecol>
+
+The column that contains time. When specifying B<-w>, with either B<-s> or B<-a> this option
+makes sure the right time is written with each point.
+
+=item B<-z>
+
+Ignore zero values in calculating the mean.
+
+=back
+
+=head2 Required files
+
+none
+
+=head2 Description
+
+Calculates the mean, rms-scatter and point-to-point scatter of a single column I<col> of
+F<files>. Prints to standard output. See output options above.
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+# end of documentation
+    
+sub bail {
+    print "\nperldoc findmean\n\nfor more information.\n";
+    exit(0);
+}
+
+$| = 1;  # forces a flush after every print
+$first_time = 1;   # only used with -w and -n together
+
+unless ($opt_c) {
+    $opt_c = 1;
+}
+
+if ($opt_t && $opt_p) {
+    print "Warning: -p overrides -t!\n";
+}
+
+@crop = (0, 0);       # defaults if we are not going to crop
+if ($opt_r) {         # are we going to crop the column?
+    @crop = split /:/, $opt_r;
+}
+
+
+@argv = @ARGV;
+if ($opt_n) {   # look for pts.night
+    @argv = ();
+    foreach (@ARGV) {
+	open PTS, "<pts.night" or die "no pts.night?\n";
+	open DAT, "<$_" or die "no file $_\n";
+	$thisnight = 0;
+	while ($in = <PTS>) {
+	    chomp $in;
+	    $thisnight++;
+	    open NEW, ">$_.tmp$thisnight";
+	    for ($i = 1; $i <= $in; $i++) {
+		$fromdat = <DAT>;
+		print NEW "$fromdat";
+	    }
+	    close NEW;
+	    push @argv, "$_.tmp$thisnight";   # the new list of tmp.files
+	}
+	close DAT;
+	close PTS;
+    }
+    if ($opt_s) {
+	open NEWPTS, ">pts.night.new" or die "error new pts.night";
+    }
+}
+
+# read in the file
+foreach (@argv) {
+    print "$_:" unless ($opt_v);
+    open IN, "<$_";
+    $in = <IN>;
+    $in =~ s/^\s+//s;
+    @in = split /\s+/, $in;
+    $num_cols = @in;
+    if ($in[0]) {
+	$col = $opt_c - 1;
+	if ($opt_t) {     # if -t then mark the time column
+	    $timecol = $opt_t - 1;
+	}
+    } else {
+	$col = $opt_c;
+	if ($opt_t) {$timecol = $opt_t};
+	$num_cols--;
+    }
+    @column = ($in[$col]);
+    $sum = $in[$col];
+    if ($opt_t) {   @time = ($in[$timecol])  };   # -t
+    if ($opt_p) {   @fullline = ($in)        };   # -p
+    while ($in = <IN>) {
+	$in =~ s/^\s+//s;
+	@in = split /\s+/, $in;
+	unless ($opt_z && $in[$col] == 0) {
+	    @column = (@column, $in[$col]);
+	    if ($opt_t) {   @time = (@time, $in[$timecol])  };     # -t
+	    if ($opt_p) {   @fullline  = (@fullline, $in)   };     # -p
+	    $sum += $in[$col];
+	}
+    }
+    close IN;
+    $num_points = @column;
+
+    if ($opt_r) {    # modify the column
+	@new_col = ();
+	@new_time = ();
+	@new_full = ();
+	for ($j = 0 + $crop[0]; $j <= $crop[1] - 1; $j++) {
+	    push @new_col, $column[$j];
+	    if ($opt_t) {  push @new_time, $time[$j]  };     # -t
+	    if ($opt_p) {  push @new_full, $fullline[$j] };  # -p
+	}
+	@column = @new_col;
+	if ($opt_t) {  @time = @new_time  };       # -t
+	if ($opt_p) {  @fullline = @new_full };    # -p
+	$sum = sum( @column );
+	$num_points = @column;
+    }
+
+    $mean = $sum / $num_points;
+    if ($opt_v) {
+	print "$mean\n" unless ($opt_s);
+    } else {
+	printf "Mean of $num_points points = %.5f", $mean;
+    }
+
+    if ($opt_a) {   # check for very large errors
+	if ($mean > $opt_a * 3 || $mean < $opt_a / 3) {
+	    print "Warning: Errors may be too high...\n";
+	    $sum = 0.0;
+	    @oldcol = @column;
+	    @column = ();
+	    if ($opt_t) {           # -t
+		@oldtime = @time;
+		@time = ();
+	    }
+	    if ($opt_p) {           # -p
+		@new_full = @fullline;
+		@fullline = ();
+	    }
+	    foreach $in (@oldcol) {
+		if ($opt_t) {  $in_time = shift @oldtime  };       # -t
+		if ($opt_p) {  $in_full = shift @new_full  };      # -p
+		if ($in > $opt_a * 10 || $in < $opt_a / 10) {
+		    print "discarded value of $in\n" unless ($opt_v);
+		    $num_points--;
+		} else {
+		    $sum += $in;
+		    @column = (@column, $in);
+		    if ($opt_t) {  @time = (@time, $in_time)  };          # -t
+		    if ($opt_p) {  @fullline = (@fullline, $in_full)  };  # -p
+		}
+	    }
+	    if ($num_points != @oldcol) {
+		$mean = $sum / $num_points;
+		printf "Mean of $num_points = %.5f", $mean unless ($opt_v);
+	    }
+	}
+    }
+
+    $pt_pt_sig = local_sig( @column );
+    $sig = sigma( $mean, @column );
+    if ($opt_o) {
+	$sig_var = sqrt ($sig**2 - $pt_pt_sig**2);
+    } else {
+	$sig_var = 0.0;
+    }
+    if ($opt_N) {   # print as S/N ratios
+	$s_n1 = $mean / $sig;
+	$s_n2 = $mean / $pt_pt_sig;
+	if ($opt_o) {
+	    $s_n3 = $mean / $sig_var;
+	    printf " S/N = %.5f, S/N(pt-pt) = %.5f, other_var = %.5f\n", $s_n1, $s_n2, 1.0/$s_n3 unless ($opt_v);
+	} else {
+	    $s_n3 = 0.0;
+	    printf " S/N = %.5f, S/N(pt-pt) = %.5f, other_var = %.5f\n", $s_n1, $s_n2, $s_n3 unless ($opt_v);
+	}
+    } else {
+	printf " sigma = %.5f, pt-pt-scatter = %.5f, other = %.5f\n", $sig, $pt_pt_sig, $sig_var unless ($opt_v);
+    }
+
+    if ($opt_s) { # now sigma-clipping
+	print "Doing sigma-clipping\n" unless ($opt_v);
+	$sum = 0.0;
+	@oldcol = @column;
+	@column = ();
+	if ($opt_t) {           # -t
+	    @oldtime = @time;
+	    @time = ();
+	}
+	if ($opt_p) {           # -p
+	    @new_full = @fullline;
+	    @fullline = ();
+	}
+	foreach $in (@oldcol) {
+	    if ($opt_t) {  $in_time = shift @oldtime  };       # -t
+	    if ($opt_p) {  $in_full = shift @new_full  };      # -p
+	    if ($in > ($mean + $opt_s * $sig) || $in < ($mean - $opt_s * $sig)) {
+		print "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bdiscarded value of $in  " unless ($opt_v);
+		$num_points--;
+	    } else {
+		$sum += $in;
+		@column = (@column, $in);
+		if ($opt_t) {  @time = (@time, $in_time)  };          # -t
+		if ($opt_p) {  @fullline = (@fullline, $in_full)  };  # -p
+	    }
+	}
+	$mean = $sum / $num_points;
+	if ($opt_v) {
+	    print "$mean\n";
+	} else {
+	    print "\nMean of $num_points = $mean ";
+	}
+	print NEWPTS "$num_points\n" if $opt_n;   # write to new pts.night file
+	$sig  = sigma($mean, @column);
+	$pt_pt_sig = local_sig(@column);
+	if ($opt_N) {   # print as S/N ratios
+	    $s_n1 = $mean / $sig;
+	    $s_n2 = $mean / $pt_pt_sig;
+	    print "S/N = $s_n1, S/N(pt-pt) = $s_n2\n" unless ($opt_v);
+	} else {
+	    print "sigma = $sig, pt-pt = $pt_pt_sig\n" unless ($opt_v);
+	}
+    }
+
+    if ($opt_w) { # write the column to a new file
+	if ((not $opt_n) || ($opt_n && $first_time)) {   # do not open unless
+	    open OUT, ">$opt_w" || die "Could not open $opt_w\n";
+	    $first_time = 0;
+	}
+	for ($i = 1; $i <= $num_points; $i++) {
+	    if ($opt_t) {
+		print OUT "$time[$i - 1]   $column[$i - 1]\n";
+	    } elsif ($opt_p) {
+		print OUT "$fullline[$i - 1]";
+	    } else {
+		print OUT "$column[$i - 1]\n";
+	    }
+	}
+    }
+
+	
+}
+
+close OUT if $opt_w;
+close NEWPTS if $opt_n;
+
+
+######## end of main program ###########
+
+
+
+
+sub local_sig {  # finds pt-pt scatter of given array
+    use strict;
+    my ($sig,$num,$last,$this);
+    $sig = 0.0;
+    $last = pop;
+    $num = @_;
+    while ($this = pop) {
+	$sig += ($this - $last)**2;
+	$last = $this;
+    }
+    $sig = sqrt( $sig / (2.0 * ($num-1)) );
+    return $sig;
+}
+    
+
+
+sub sigma {  # finder rms scatter af et givet array, givet en middelvaerdi
+    use strict;
+    my($sig,$mean,$num);
+    $mean = shift;
+    $sig = 0.0;
+    $num = 0;
+    foreach (@_) {
+	$sig += $_**2;
+	$num += 1;
+    }
+    $sig = ( $sig / $num - $mean**2 )**.5;
+    return $sig;
+}
+
+sub sum {  # summerer et givet array
+    use strict;
+    my($sum,$e);
+    $sum=0;
+    foreach $e (@_) {
+        $sum += $e;
+    }
+    return $sum;
+}
+
+

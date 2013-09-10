@@ -1,0 +1,193 @@
+#!/usr/bin/perl
+# -w
+
+use Getopt::Std;
+#use strict 'vars';
+
+
+getopts('c:t:i:z:w:n:N') || &bail;   # opt_i takes the time interval in days, if difference to neighbor point is smaller, they are combined
+                              # opt_c is the column in the file under consideration
+                              # opt_t is the column that contains time in days
+                              # opt_z prints this value for the sigma instead of 0 for points that are not combined
+                              # opt_w prints the weight (1/sig*sig) instead of sigma and divides by this number
+                              # opt_n is number of additional columns from input to include in output
+                              # opt_N means do NOT print any sigma or weight
+
+# combine adjacent points into one if the time interval between them is 
+# sufficiently small
+
+# begin documentation
+=pod
+
+=head1 
+
+
+=head2 Syntax
+
+=head2 Options
+
+
+=head2 Required files
+
+
+=head2 Description
+
+
+=head2 Status
+
+=cut
+# end of documentation
+    
+
+sub bail {
+    print "\nperldoc combinepts\n\nfor more information.\n";
+    exit(0);
+}
+
+if ($opt_z) {
+    $zerosub = $opt_z;
+} else {
+    $zerosub = 0;
+}
+
+if ($opt_i) {
+    $timelimit = $opt_i;
+} else {
+    bail;
+}
+
+if ($opt_n) {
+    $morecols = $opt_n;
+}
+
+# read in the file
+foreach (@ARGV) {
+    open IN, "<$_";
+
+    chomp($in = <IN>);
+    $in =~ s/^\s*//s;
+    @in = split /\s+/, $in;
+    $num_cols = @in;
+    if ($in[0]) {
+	$col = $opt_c - 1;
+	$tim = $opt_t - 1;
+    } else {
+	$col = $opt_c;
+	$tim = $opt_t;
+	$num_cols--;
+    }
+
+    @column = ($in[$col]);
+    @time   = ($in[$tim]);
+    if ($opt_n) {
+	$num = 1;
+	$dum = "";
+	for ($i = 1; $i <= $num_cols; $i++) {
+	    if ( $i != $col && $i != $tim && $num <= $morecols) {
+		@extra = (@extra, $i);   # contains column numbers
+		$dum = $dum."$in[$i]  ";
+		$num++;
+	    }
+	}
+	@morecol = ($dum);
+    }
+    while ($in = <IN>) {
+	$in =~ s/^\s*//s;
+	@in = split /\s+/, $in;
+	@column = (@column, $in[$col]);
+	@time   = (@time,   $in[$tim]);
+	if ($opt_n) {
+	    $dum = "";
+	    foreach $ext (@extra) {
+		$dum = $dum."$in[$ext]  ";
+	    }
+	    @morecol = (@morecol, $dum);
+	}
+    }
+
+    close IN;
+
+    $num_points = @column;
+}
+
+# step through the column ,combining next point until condition is no longer met
+$i = 0;
+while ($i < $num_points) {
+    $newt = $time[$i];
+    $newc = $column[$i];
+    
+    $j = 1;
+    @sigarr = ($newc);
+    while ($time[$i+$j] - $time[$i] < $timelimit && $i+$j < $num_points && $time[$i] < $time[$i+$j]) {
+	$newt += $time[$i+$j];
+	$newc += $column[$i+$j];
+	@sigarr = (@sigarr, $column[$i+$j]);
+	$j++;
+    }
+    $newt = $newt / $j;
+    $newc = $newc / $j;
+    $sig  = sigma( $newc, @sigarr );
+    if ($sig == 0) {  $sig = $zerosub  };
+    if ($opt_w) {  $sig = 1.0/($sig*$sig)/$opt_w  };
+    if ($opt_n) {
+	if ($opt_N) {
+	    print "$newt  $newc  $morecol[$i]\n";
+	} else {
+	    print "$newt  $newc  $sig  $morecol[$i]\n";
+	}
+    } else {
+	if ($opt_N) {
+	    print "$newt  $newc\n";
+	} else {
+	    print "$newt   $newc   $sig\n";
+	}
+    }
+    $i += $j;
+}
+
+
+sub local_sig {  # finds pt-pt scatter of given array
+    use strict;
+    my ($sig,$num,$last,$this);
+    $sig = 0.0;
+    $last = pop;
+    $num = @_;
+    while ($this = pop) {
+	$sig += ($this - $last)**2;
+	$last = $this;
+    }
+    $sig = sqrt( $sig / (2.0 * $num) );
+    return $sig;
+}
+    
+
+
+sub sigma {  # finder rms scatter af et givet array, givet en middelvaerdi
+    use strict;
+    my($sig,$mean,$num);
+    $mean = shift;
+    $sig = 0.0;
+    $num = 0;
+    foreach (@_) {
+	$sig += $_**2;
+	$num += 1;
+    }
+    if ($num == 1 || $num > 5) {
+	$sig = ( $sig / $num - $mean**2 )**.5;
+    } else {
+	$sig = ( $sig / ($num - 1) - $mean**2 )**.5;
+    }
+    return $sig;
+}
+
+sub sum {  # summerer et givet array
+    use strict;
+    my($sum,$e);
+    $sum=0;
+    foreach $e (@_) {
+        $sum += $e;
+    }
+    return $sum;
+}
+
+

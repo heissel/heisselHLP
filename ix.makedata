@@ -1,0 +1,167 @@
+#!/usr/bin/perl
+
+# tager filnavne fra kommandolinjen og genererer datafiler
+# ud fra en tidsfil, som har tider i sekunder.
+
+#use strict;
+=pod
+
+=head1 ix.makedata
+
+=head2 Syntax
+
+ix.makedata F<file1> B<type1> [ F<file2> B<type2> ...]
+
+=head2 Options
+
+none
+
+=head2 Required files
+
+F<time.sec> with time in seconds. Will be generated if not present.
+
+=head2 Description
+
+Makes artificial data sets, with or without noise. The B<type> can be either I<w>
+for white noise or a digit giving the number of sine-terms to include. Outputs to
+F<file> as well as standard output.
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+
+@dum = split(/\s+/,`date`);
+@d = split(/:/,$dum[3]);
+srand int($d[0]*$d[2]+$dum[2]*$d[1]);
+
+# tjekker om tidsfilen er tilstede og indlaeser
+if (-e "time.sec") {
+    open(TIME,"time.sec");
+    @time = <TIME>;
+    $num_datapts = (@time);
+} else {
+    print "Warning: No time.sec file. I am creating one now...\n\n";
+    print "how many data points: ";
+    chomp($num_datapts = <STDIN>);
+    print "timestep: ";
+    chomp($time_step = <STDIN>);
+    open(TIME,">time.sec");
+    for ($i = 1; $i <= $num_datapts; $i++) {
+	$time[$i-1] = $time_step*$i;
+	print TIME "$time[$i-1]\n";
+    }
+    close(TIME);
+    print "Equidistant time.sec created!\n\n";
+#    err_message();
+#    die "No time file!\n";
+}
+
+$topi = 6.2831853;
+
+# unless the hash is given key,value pairs of filename,type_of_action
+# we type a help message. If OK then we proceed... 
+$num_args = @ARGV;
+if ($num_args%2 || $num_args==0) {
+    err_message();
+    die "\n Odd number of arguments!\n";
+}
+
+%file_and_type=@ARGV;
+
+foreach (values(%file_and_type)) {
+    unless (/[0-9]/ || /^w/) {
+	err_message();
+	die "\n Invalid type!\n";
+    }
+}
+
+# got so far, so we must be OK...
+print "Magnitude of noise: ";
+chomp($noise_mag = <STDIN>);
+
+while (($filename,$type_of_action)=each(%file_and_type)) {
+
+    open(OUT,">$filename");
+    print "mean value of data: ";
+    chomp($mean = <STDIN>);
+
+    unless ($type_of_action =~ /w/) {
+
+	print "spaced list of periods (s) : ";
+	chomp($dum = <STDIN>);
+	@freq = split(/\s+/,$dum);
+
+	print "list of phases: ";
+	chomp($dum = <STDIN>);
+	@phase = split(/\s+/,$dum);
+	unless (@freq == @phase) {
+	    err_message();
+	    die "\n Mismatching nuber of arguments!\n";
+	}
+
+	print "list of amplitudes: ";
+	chomp($dum = <STDIN>);
+	@ampl = split(/\s+/,$dum);
+	unless (@ampl == @phase) {
+	    err_message();
+	    die "\n Mismatching nuber of arguments!\n";
+	}
+
+	for ($j = 0; $j <= $num_datapts-1; $j++) {
+	    $data = 0.0;
+	    for ($i = 0; $i <= $type_of_action-1; $i++) {
+		$data += $ampl[$i] * sin($topi * $time[$j] / $freq[$i] + $phase[$i]);
+	    }
+	    if ($noise_mag) {
+		$data += norm_dist_noise($noise_mag) + $mean;
+	    } else {
+		$data += $mean;
+	    }
+	    print OUT "$data\n";
+	    print "$data\n";
+	}
+
+    } else {
+
+	for ($j = 0; $j <= $num_datapts-1; $j++) {
+	    $data = norm_dist_noise($noise_mag) + $mean;
+	    print OUT "$data\n";
+	}
+
+    }
+
+    close(OUT);
+    print "Made $filename of type '$type_of_action'.\n";
+
+}
+
+
+
+
+sub norm_dist_noise {
+    my ($noise, $sig,$v1,$v2,$r,$fac);
+
+    ($sig) = @_;
+
+    do {
+	$v1 = 2.*rand(1.) - 1.;
+	$v2 = 2.*rand(1.) - 1.;
+	$r = $v1**2 + $v2**2;
+	redo if ($r >= 1. || $r == 0.);
+	$noise = $v1 * sqrt(-2.*log($r)/$r) * $sig;
+	return $noise;
+    }
+}
+
+
+
+sub err_message {
+    print "usage:  ix.makedata <file1> <type1> <file2> <type2> ...\n";
+    print "        where <type> is either a digit for the number\n";
+    print "        of sine-terms or 'w' for white noise. A one-column\n";
+    print "        file 'time.sec' with the time in seconds must be\n";
+    print "        present - if not; it is created.\n";
+}    
+

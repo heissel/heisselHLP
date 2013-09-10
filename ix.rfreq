@@ -1,0 +1,58 @@
+#!/usr/bin/perl
+
+# takes a .per file from Period98 and outputs it in IDL friendly format
+
+use Getopt::Std;
+
+
+getopts('z:a:e:') || &bail;          # $opt_z is zeropoint (in degrees) for the phases
+                                 # if opt_a is scaling factor for the amplitudes
+                                 # opt_e contains comma-separated list of the errors (written directly)
+if ($opt_a) {
+    $scale = $opt_a;
+} else {
+    $scale = 1;
+}
+
+if ($opt_z) {
+    $zero_pt = $opt_z;
+} else {
+    $zero_pt = 0;
+}
+
+if ($opt_e) {
+    @error = split /,/, $opt_e;
+} else {
+    @error = 0;
+}
+
+bail_out() unless (@ARGV);
+
+
+foreach $file (@ARGV) {
+    open PER, "<$file.per" or die "No file $file.per\n";
+    open OUT, ">$file.frq" or die "Error opening $file.frq\n";
+    while ($in = <PER>) {
+	unless ($in =~ /\(/) { 
+	    ($f, $frq, $amp, $phi) = split /\s+/, $in;
+	    $amplitude = $amp * $scale;  
+	    $phase = $phi * 360.0 - $zero_pt;
+	    $error = shift @error;
+	    print "$f:   $frq c/d ::: a = $amplitude ::: phi = $phase ::: err = $error\n";
+	    write OUT;
+	}
+    }
+    close PER;
+    close OUT;
+}
+
+
+format OUT =
+@##.####   @##.####  @###.####  @.##
+$frq, $amplitude, $phase, $error
+.
+
+sub bail_out {
+    print "\nUsage:  ix.rfeq [-a scale] [-z zero_pt] [-e err1,err2,...] <file>\n";
+    exit;
+}

@@ -1,0 +1,178 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+#use strict 'vars';
+
+my $min_to_sec = 60.00;
+my $hrs_to_sec = 3600.00;
+my $day_to_sec = 86400.00; 
+my (
+    $zero_ut, $zero_year, $zero_mth, $zero_day,
+    $in, $yy, $mm, $day, $ss,
+    );
+
+getopts('d:u:s:a:DS') || &bail;          # $opt_d is zeropt of days DDMMYY
+                                   # $opt_u is zeropt of UT HH:MM:SS
+                                   # $opt_s means simple conversion of one night (adding
+                                   #       value to after-midnight points)
+                                   # $opt_D converts sec -> day
+                                   # $opt_S converts day -> sec
+                                   # $opt_a adds constant to series
+# begin documentation
+=pod
+
+=head1 convtime
+
+converts lists of UT times and dates to decimal seconds, or perform simple operations
+like adding constants, correcting for midnights and conversions between seconds and days.
+
+=head2 Syntax
+
+convtime [B<-d> I<DDMMYY> B<-u> I<HH:MM:SS>] [B<-s> I<value>] [B<-a> I<offset>] [B<-D>] [B<-S>] 
+
+
+=head2 Options
+
+=over 3
+
+=item B<-d> I<DDMMYY>
+
+    The day to be used as zeropoint. B<-u> must also be specified.
+
+=item B<-u> I<HH:MM:SS>
+
+    UT time to be used as zero point. B<-d> must also be specified.
+
+=item B<-s> I<value>
+
+    Adds I<value> to all points after midnight, or rather; 
+to all points after which a point was found to have a lower 
+value than the one before it.
+
+=item B<-a> I<offset>
+
+    Adds the constant I<offset> to all values.
+
+=item B<-D>
+
+    Converts from seconds to days (divides by 86400).
+
+=item B<-S>
+
+    Converts from days to seconds (multiplies by 86400).
+    
+
+=back
+
+=head2 Required files
+
+F<day.inp> and F<time.inp> containing dates and UT times respectively. F<day.inp> is only
+necessary if options B<-d> and B<-u> are specified.
+
+=head2 Description
+
+Reads UT times and the corresponding date from the required files,
+subtracts the zero point of time given by the command line options and
+prints the resulting time in seconds from the zero point to standard output.
+Can also perform simple conversions of the file F<time.inp> when B<-d> and B<-u> are 
+not given.
+
+=head2 Status
+
+27-04-2001: Documentation up to date.
+11-10-2000: First version with POD
+
+=cut
+# end of documentation
+    
+sub bail {
+    print "\nperldoc convtime\n\nfor more information.\n";
+    exit(0);
+}
+
+#print "$opt_u\n$opt_d\n";
+#exit;
+
+&bail unless (($opt_u && $opt_d) || $opt_s || $opt_D || $opt_a || $opt_S);
+
+if ($opt_u) {
+# calculate the zeropoint in sec to be subtracted
+# if nothing was specified for the options, zeropoint evaluates to zero...
+    $zero_ut = make_ut_to_sec($opt_u);
+    ($zero_year, $zero_mth, $zero_day) = split_day($opt_d);
+
+
+
+# read in a column of data in format HH:MM:SS
+    open TIME, "<time.inp" || die "time.inp missing\n";
+    open DAY, "<day.inp" || die "day.inp missing\n";
+
+    while (chomp($in = <TIME>)) {
+	chomp( $ss = <DAY>);
+	($yy, $mm, $day) = split_day($ss);
+	$ss = make_ut_to_sec($in) - $zero_ut
+	    + ($day - $zero_day) * $day_to_sec;
+	print "$ss\n";
+    }
+
+    close TIME;
+    close DAY;
+    exit(0);
+}
+
+$last_value = 0.0;    #initialize
+open TIME, "<time.inp" || die "time.inp is missing\n";
+while (chomp($in = <TIME>)) {
+    if ($opt_s) {   # simple thing. Add value after midnight
+	if ($in > $last_value) {  # before midnight
+	    print "$in\n";
+	    $last_value = $in;
+	} else {  # after midnight
+	    $last_value = $opt_s;
+	    $newtime = $in + $opt_s;
+	    print "$newtime\n";
+	}
+    } elsif ($opt_D) { # convert input to days
+	$newtime = $in / 86400.0000;
+	print "$newtime\n";
+    } elsif ($opt_S) { #convert to sec
+	$newtime = $in * 86400.0000;
+	print "$newtime\n";
+    } elsif ($opt_a) { # add simple constant
+	$newtime = $in + $opt_a;
+	print "$newtime\n";
+    }
+}
+close TIME;
+
+
+
+
+sub split_day ($) {
+    my $in = shift;
+    my ($z1, $z2, $z3);
+
+    $in =~ tr/ \/'":.-//d;   # now in format DDMMYY
+    $z1 = substr $in, 4, 2;
+    if ($z1 < 60) { $z1 += 100; }
+    $z2 = substr $in, 2, 2;
+    $z3 = substr $in, 0, 2;
+
+    return ($z1, $z2, $z3);
+}
+
+sub make_ut_to_sec ($) {
+    my ($ut, $hh, $mm, $ss);
+    my $in = shift;
+
+    $in =~ tr/ \/'":.//d;   # now in format HHMMSS
+    $hh = substr $in, 0, 2;
+    $mm = substr $in, 2, 2;
+    $ss = substr $in, 4, 2;
+    $ut = $ss + $mm * $min_to_sec + $hh * $hrs_to_sec;
+
+    return $ut;
+}
+
+

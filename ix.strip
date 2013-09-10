@@ -1,0 +1,113 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+
+getopts('ec:w:') || &bail;
+
+    # $opt_e means to cut from the end of each line
+    # $opt_c is the number of chars to chop in each line
+
+# reads files from the command line and makes new files with -c<num> chars chopped off each line.
+
+# read the files
+
+$| = 1;  # forces a flush after every print
+
+if ($opt_c) {
+    $num_chop = $opt_c;
+} elsif ($opt_w) {
+    $num_chop = $opt_w;
+} else {
+    print "Give number of chars/words to cut with -c or -w option!\n";
+    &bail();
+}
+
+unless (@ARGV) {
+    print "No file name given!\n";
+    &bail();
+} else {
+    @files = @ARGV;
+}
+
+foreach $file (@files) {
+    open IN, "<$file";
+    open NEW, ">$file.srp";
+
+    while ($in = <IN>) { 
+	chomp $in;
+	$in =~ s/^\s+//s;
+
+	if ( ($opt_e && $opt_w) || ((not $opt_e) && $opt_c)) {
+	    $in = reverse $in;
+	    $in =~ s/^\s+//s;
+	}
+
+	for ($i = 1 ; $i <= $num_chop ; $i++ ) {
+	    if ($opt_c) {
+		chop $in;
+	    } else {
+		$in =~ s/^\S+\s*//s;
+	    }
+	}
+
+	if ( ($opt_e && $opt_w) || ((not $opt_e) && $opt_c)) {
+	    $in = reverse $in;
+	}
+
+	print NEW "$in\n";
+    }
+
+    close IN;
+    close NEW;
+}
+
+
+
+
+sub bail {
+    print "Fatal error. Exiting!\n";
+    exit();
+}
+
+=pod
+
+=head1 ix.strip
+
+=head2 Syntax
+
+ix.hipass B<-c> I<num_chars> [B<-e>]
+
+=head2 Description
+
+
+
+=over 3
+
+=item B<-t> I<time_scale>
+
+This must NOT be omitted.
+Time scale for the smoothing of the time series, which produces the low-pass filtered series. 
+Actually the FWHM of the gaussian used in
+the smoothing. 
+
+=item B<-v>
+
+Verbose mode. Prints information about the series and the smoothing.
+
+=item B<-e>
+
+Do not write the "extra" columns to the new files.
+
+=back
+
+=head2 Status
+
+v0.9.2 Thomas H. Dall, 2002/10.03
+
+=cut
+
+# Revision history
+#
+# 2002/09/30:   First working version.
+# 2002/10/03:   Added full word chopping

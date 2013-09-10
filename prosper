@@ -1,0 +1,5 @@
+#! /bin/tcsh -f
+
+latex $1                          # will create sample.dvi
+dvips -t a4 -o $1.ps $1                   # will create sample.ps
+ps2pdf -dPDFSETTINGS=/prepress $1.ps  # will create sample.pdf

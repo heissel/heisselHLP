@@ -1,0 +1,225 @@
+#!/usr/bin/perl 
+
+use Getopt::Std;
+getopts('l:ocqv');   # opt_l is the name of the file with the filenames
+                          # opt_o do not affect observation templates
+                          # opt_c do not affect calibration templates
+                          # opt_q do not affect aquisition templates
+                          # opt_v prints version number and exits
+
+my $version = "0.2.2";
+
+if ($opt_v) {
+    print "\nThis is obxmodify, v$version\n\nTry 'perldoc obxmodify' for more information.\n\n";
+    exit();
+}
+
+unless (@ARGV) {
+    if ($listname = $opt_l) {
+	if (-e "$listname") {
+	    open FILES, "$listname" || die "Cannot open $listname\n";
+	    @files = <FILES>;
+	    close FILES;
+	} else {
+	    print "Give list of files!\n";
+	    &bail();
+	} 
+    } else {
+	print "Give list of files!\n";
+	&bail();
+    }
+} else {
+    @files = @ARGV;
+}
+
+
+# check that there are indeed some file names given...
+#
+unless (@files) {
+    print "Give list of files!\n";
+    &bail();
+}
+
+
+# the new files are stored in subdir ".new", so check if it exist and if not, attempt to create it
+#
+unless (-d ".new") {
+    print "Please make .new/ to store new files... ";
+    exit();
+}
+
+
+# input the needed search string and the replacement string
+#
+print "Type (part of) the field name:     ";
+$oldstring = <STDIN>;
+chomp($oldstring);
+
+print "Type replacement value (no \"'s!):  ";
+$newstring = <STDIN>;
+chomp($newstring);
+
+
+FILE:foreach (@files) {
+    open OBXOLD, "<$_" || die "Cannot open $_. Fatal error\n";
+    open OBXNEW, ">.new/$_" || die "Cannot create .new/$_. Fatal error\n";
+    print "$_ ";
+    $name = $_;
+    $completeskip = 0;
+    READ:while ($line = <OBXOLD>) {
+	if ($opt_a) {
+	    if ($line =~ /ACQUISITION.TEMPLATE/) {
+		# next match will not be affected
+		$jumpthis = 1;
+		next READ;
+	    }
+	}
+	if ($opt_o) {
+	    if ($line =~ /^TEMPLATE.NAME/ && $line !~ /Flat/ && $line !~ /Dark/ && $line !~ /ThAr/) {
+		$jumpthis = 1;
+		next READ;
+	    }
+	}
+	if ($opt_c) {
+	    if ($line =~ /type\s+\"C/) {
+		# this file contains calibrations - skip completely
+		$completeskip = 1;
+		next READ;
+	    }
+	}
+	# now see if the line matches and change it if it does
+	#
+	if ($line =~ /$oldstring/) {
+	    unless ($jumpthis || $completeskip) {
+		# it matches - now sustitute the value between ""
+		$line =~ s/\".+\"/\"$newstring\"/;
+		print "*";
+	    }
+	    $jumpthis = 0;
+	}
+	print OBXNEW "$line";
+    }
+    print " -> .new/$name\n";
+    close OBXOLD;
+    close OBXNEW;
+}
+
+# END of main program
+
+
+sub bail {
+#    print "obxmodify [-l list_of_files] [-o] [-c] [-q] [files]\n";
+#    die "\nAborting...\n";
+    exit();
+}
+
+
+=pod
+
+=head1 NAME
+
+obxmodify  -  Modify parameters in batches of OB files
+
+
+=head1 SYNOPSIS
+
+B<obxmodify> [B<-l> I<file>] [B<-o>] [B<-c>] [B<-q>] [B<-v>] [I<files>]
+
+
+=head1 DESCRIPTION
+
+Modifies parameters in the OB I<files> specified on the command line and
+creates new files in subdirectory .new, that the user must provide. No input
+I<files> are modified, so the user should check the results after running
+B<obxmodify> before moving the files in
+.new to the parent directory.
+
+B<obxmodify> will prompt for (part) of the line description where changes are wanted, and
+for the replacement value.
+By default
+matches for all types of observing templates will get replaced, but this can be modified by
+any combination of the options B<-o>, B<-c> and B<-q>.
+
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-l> I<file>
+
+Tells B<obxmodify> to take the names of the files to be modified from this I<file>
+instead of from the command line.
+
+=item B<-o>
+
+Tells B<obxmodify> not to touch observing templates
+
+=item B<-c>
+
+Tells B<obxmodify> not to touch calibration templates
+
+=item B<-q>
+
+Tells B<obxmodify> not to touch acquisition templates
+
+=item B<-v>
+
+Prints version number and exits.
+
+=back
+
+
+=head1 FILES
+
+=over 4
+
+The original files are never touched. Instead, new versions with the same names are
+written to the directory .new, which must be created by the user before running
+B<obxmodify>.
+
+If the B<-l> option is used, a I<file> with the names of the files to be
+modified must be created. See description above.
+
+=back
+
+
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Give list of files!
+
+(F) You must specify filenames, either on the command line or with B<-l>.
+
+=item Please make .new/ to store new files... 
+
+(F) The user must create .new directory, where the modified files will be stored.
+
+=item Cannot open I<file>. Fatal error
+
+(F) Check if the file exists with the right permissions.
+
+=item Cannot create .new/I<file>. Fatal error
+
+(F) Check the permissions of the .new directory
+
+=back
+
+All other errors are probably due to bugs, and should be reported to the author.
+All other comments and suggestions are also most welcome!
+
+=head1 REQUIRES
+
+Perl 5.004, Getopt::Std
+
+
+=head1 AUTHOR
+
+T. H. Dall, tdall@eso.org
+
+=cut
+
+
+# 2002-09-16: V0.2.2      (need only give replacement value inst.of whole string)
+# 2002-09-15: Version 0.2
+

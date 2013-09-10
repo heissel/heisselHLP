@@ -682,6 +682,7 @@ sub getHiLo {
     return (\@hilo, \@datehl, \@ishigh, \%trendh, \%trendl);
 }
 
+
 sub getSetup {
     use strict;
     my $c = @_; die "Found $c elements to getSetup(), should be 9\n" unless ($c == 9);

@@ -1,0 +1,292 @@
+#!/usr/bin/perl
+# -w
+
+use Getopt::Std;
+#use warnings;
+#use diagnostics;
+
+getopts('t:evi:x:T:') || &bail;
+
+    # $opt_t is required; timescale of pt-pt calculation
+    # $opt_e means do not append the remaining columns, ie only t(i) x(i) w(i) ws(i)  in result files
+    # $opt_v means print messages about the calculations
+    # opt_i is string with all-over weights for each subseries
+    # opt_x is the exponent used in the weight calculation
+    # opt_T is required. timescale of smoothing of weights
+
+# calculates weights (normalized) for a time series given files with t(i) x(i) based
+# on the local point-to-point scatter.
+
+# read the file
+
+my @w;
+my $factor = 1.5;    # increase in scatter when we take the nearest point as substitute
+
+$| = 1;  # forces a flush after every print
+
+unless ($opt_t) {
+    print "Please specify time interval!\n";
+    &bail();
+} else {
+    $gauss_t = $opt_t;
+}
+unless ($opt_T) {
+    print "Please specify time interval!\n";
+    &bail();
+} else {
+    $gauss_t2 = $opt_T;
+}
+
+unless ($opt_x) {
+    print "Please specify weight exponent!\n";
+    &bail();
+} else {
+    $w_exp = $opt_x;
+}
+
+unless (@ARGV) {
+    print "No file name given!\n";
+    &bail();
+} else {
+    @files = @ARGV;
+}
+
+foreach $file (@files) {
+    open IN, "<$file";
+    @t = ();
+    @x = ();
+    @ex = ();
+    @w = ();
+    @ws = ();
+
+    $num =0;
+    while ($in = <IN>) {
+	$in =~ s/^\s*//s;
+	@in = split /\s+/, $in;
+	$t = shift @in;
+	$prev_t = $t unless $num;
+	if ($t < $prev_t) {
+	    @num = (@num, $num);
+	    $num = 0;
+	}
+	$prev_t = $t;
+	@t = (@t, $t);
+	@x = (@x, shift @in);
+	@ex = (@ex, "@in");
+	$num++;
+    }
+    @num = (@num, $num);
+    close IN;
+
+    $sumnn = 0;
+    $num_ser = @num;
+    if ($opt_v) {
+	print "There are $num_ser subseries.\nNumber of points in subseries: @num\n";
+    }
+    if ($opt_i) {
+	if ($opt_v) {
+	    print "Reading individual weights for the subseries. ";
+	}
+	@ser_wgt = split /\s+/, $opt_i;
+	if (@ser_wgt != $num_ser) {
+	    print "Error  -- mismatching numbers!\n"; exit();
+	}
+	if ($opt_v) {
+	    print "Numbers are: @ser_wgt\n";
+	}
+    } else {
+	for ( $i = 0 ; $i < $num_ser ; $i++ ) {
+	    $ser_wgt[$i] = 1.0;
+	}
+    }
+
+    open WGT, ">$file.wgt" || die "Error creating $file.wgt\n";
+
+    #for each point: calculate the scatter in the surroundings
+    $last_num_pts = 0;
+    foreach $num_pts (@num) {
+	for ( $i = $last_num_pts ; $i < $num_pts + $last_num_pts ; $i++ ) {
+	    $num = 0;
+	    $dif = 0.0;
+	    $wsum = 0.0;
+	    # sum going down
+	    $j = $i - 1;
+	    while ( $j >= 0 && $t[$i] - $t[$j] < 2 * $gauss_t && $t[$i] - $t[$j] > 0.0 ) {
+		$wgt = exp ( -1.0* ( ($t[$i] - $t[$j])/$gauss_t )**2 );
+		$dif += $wgt * ($x[$i] - $x[$j])**2 ;
+		$wsum += $wgt;
+		$j--;
+		$num++;
+	    }
+	    #sum going up
+	    $j = $i + 1;
+	    while ($j < $num_pts && $t[$j] - $t[$i] < 2 * $gauss_t && $t[$j] - $t[$i] > 0.0 ) {
+		$wgt = exp ( -1.0* ( ($t[$i] - $t[$j])/$gauss_t )**2 );
+		$dif += $wgt * ($x[$j] - $x[$i])**2 ;
+		$wsum += $wgt;
+		$j++;
+		$num++;
+	    }
+	    if ($dif == 0.0) {
+		print "Point \# $i: ";
+		print "Scatter sum is zero. You used $num points. Maybe increase time interval?\n";
+		#exit();
+		$dif = $w[$i - 1] * $factor;
+	    } else {
+		$dif = sqrt($dif) / 2.0 / $wsum;  
+	    }
+	    @w = (@w, $dif);
+	}
+	$last_num_pts += $num_pts;
+    }
+
+    $total_pts = sum( @num );
+    $wsum = sum( @w ) / $total_pts;
+    for ( $i = 0 ; $i < $total_pts ; $i++ ) {
+	$w[$i] = $w[$i] / $wsum;
+    }
+
+# next foreach:  do it on w() producing the smoothed scatter and later the weights
+    # for each point: sum neighbors inside the box-car like (^4) gauss-bell
+    $last_num_pts = 0;
+    foreach $num_pts (@num) {
+	for ( $i = $last_num_pts ; $i < $num_pts + $last_num_pts ; $i++ ) {
+	    $smth  = 0.0;
+	    $wsum  = 0.0;
+	    $num   = 0;
+	    # sum going down
+	    $j = $i - 1;
+	    while ( $j >= $last_num_pts && $t[$i] - $t[$j] < 1.5 * $gauss_t2 && $t[$i] - $t[$j] >= 0.0 ) {
+		$wgt = exp ( -1.0* ( ($t[$i] - $t[$j])/$gauss_t2 )**4 );
+		$smth += $w[$j] * $wgt;
+		$wsum += $wgt;
+		$j--;
+		$num++;
+	    }
+	    #sum going up
+	    $j = $i;
+	    while ($j < $num_pts + $last_num_pts && $t[$j] - $t[$i] < 1.5 * $gauss_t2 && $t[$j] - $t[$i] >= 0.0 ) {
+		$wgt = exp ( -1.0* ( ($t[$i] - $t[$j])/$gauss_t2 )**4 );
+		$smth += $w[$j] * $wgt;
+		$wsum += $wgt;
+		$j++;
+		$num++;
+	    }
+	    if ($smth == 0.0) {
+		print "\@ $i: Smoothed sum is zero. You used $num points. Maybe increase time interval?\n";
+		exit();
+	    }
+	    $ws = 1.0 / ( ( $smth / $wsum ) ** $w_exp );  # make th smoothed into weights
+	    @ws = (@ws, $ws);                 
+	    if ($opt_v) {
+		$sumnn += $num;
+	    }
+	}
+	$last_num_pts += $num_pts;
+    }
+
+    if ($opt_v) {
+	$sumnn =  $sumnn / $total_pts;
+	print "Used $sumnn points in the smooth on average.\n";
+    }
+
+    # now write results to file
+    $wsum = sum( @w ) / $total_pts;
+    $ssum = sum( @ws ) / $total_pts;
+#    print "$wsum  $ssum\n"; exit();
+    $last_num_pts = 0;
+    $j = 0;
+    foreach $num_pts (@num) {
+	if ($opt_e) {
+	    for ( $i = $last_num_pts ; $i < $num_pts + $last_num_pts ; $i++ ) {
+		$w[$i] = 1.0 / ( $w[$i] ** $w_exp );  # ...and adjust w to make the weight
+		$w =  ( $w[$i]  / $wsum ) * $ser_wgt[$j];
+		$ws = ( $ws[$i] / $ssum ) * $ser_wgt[$j];
+		print WGT "$w  $ws\n";
+	    }
+	} else {
+	    for ( $i = $last_num_pts ; $i < $num_pts + $last_num_pts ; $i++ ) {
+		$w[$i] = 1.0 / ( $w[$i] ** $w_exp );  # ...and adjust w to make the weight
+		$w =  ( $w[$i]  / $wsum ) * $ser_wgt[$j];
+		$ws = ( $ws[$i] / $ssum ) * $ser_wgt[$j];
+		print WGT "$w  $ws  $ex[$i]\n";
+	    }
+	}
+	$last_num_pts += $num_pts;
+	$j++;
+    }
+
+    close WGT;
+
+}
+
+exit();
+
+sub sum {  # summerer et givet array
+    use strict;
+    my($sum,$e);
+    $sum=0;
+    foreach $e (@_) {
+        $sum += $e;
+    }
+    return $sum;
+}
+
+
+sub bail {
+    print "Fatal error. Exiting!\n";
+    exit();
+}
+
+
+=pod
+
+=head1 ix.weight
+
+=head2 Syntax
+
+ix.weight B<-t> I<time_scale> [B<-v>] [B<-e>] F<files>
+
+=head2 Description
+
+Reads time series from F<files> and writes new files with weights calculated from local
+point-to-point scatter in the series. Also a smoothed version of the weights is calculated.
+The input F<files> must have the following structure of the rows, with time generally increasing 
+down the file:
+
+I<time>  I<data>  I<extras>
+
+The file may contain different subsets that will be treated individually via the difference in time
+between the end of one series and the beginning of the next. 
+The structure of the result file, named F<files.wgt> is as follows:
+
+I<raw_weight>  I<smoothed_weight>  I<extras>
+
+where the writing of the B<extras> can be omitted via the B<-e> option.
+
+=over 3
+
+=item B<-t> I<time_scale>
+
+This must NOT be omitted.
+FWHM of the gaussian under which the weight is calculated.
+
+=item B<-v>
+
+Verbose mode. Prints information about the series and the calculations.
+
+=item B<-e>
+
+Do not write the "extra" columns to the new files.
+
+=back
+
+=head2 Status
+
+v0.9.2 Thomas H. Dall, 2002/09/17
+
+=cut
+
+# Revision history
+#
+# 2002/09/17:   First working version.

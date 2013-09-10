@@ -1,0 +1,179 @@
+#!/usr/bin/perl 
+#-w
+#  Version history:
+# 2002-10-24:  added POD in standard format.
+#
+
+use Getopt::Std;
+
+
+getopts('c:n:ASMDm') || &bail;      # $opt_c is number of column in the two files (must be the same)
+                                   # $opt_A/S/M/D is add, subtract, multiply and divide.
+                                   # $opt_n is constant number to be ASMD to the file
+                                   # $opt_m means to add a long list of files
+
+# begin documentation
+=pod
+
+=head1 NAME
+
+add2files - add, subtract, multiply, divide columns in files
+
+
+=head1 SYNOPSIS
+
+B<add2files> [B<-c> I<column>] [B<-n> I<const>] B<-A> | B<-S> | B<-M> | B<-D> I<file>...
+
+
+=head1 DESCRIPTION
+
+B<add2files> will add one column of two I<file(s)> specified on
+the command line and print the result to standard output.
+By default the first column is used; a different column can be
+specified with B<-c>.
+
+The user must choose either addition, subtraction, multiplication
+or division by specifying one of the options B<-A>, B<-S>, B<-M> or B<-D> respectively.
+
+By specifying a I<constant> with B<-n>, this will be added (or subtracted, or multiplied, or divided) 
+to the column of the I<file(s)> instead.
+
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-c> I<column>
+
+Use this I<column>. Default is first column
+
+=item B<-n> I<const>
+
+Use the number I<const> for the operations instead of the 
+contents of the coulmn of the second file.
+
+=item B<-A> | B<-S> | B<-M> | B<-D>
+
+Specifies the operation to be performed; either addition, subtraction,
+multiplication or division respectively. One of these must be specified.
+
+=back
+
+
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Cannot take more than two files.
+
+(F) Currently only support for up to two files. More will just
+confuse B<add2files> and give strange results.
+
+=back
+
+
+=head1 REQUIRES
+
+Perl 5.004, Getopt::Std
+
+
+=head1 SEE ALSO
+
+perl(1)
+
+
+=head1 AUTHOR
+
+T. H. Dall, tdall@eso.org
+
+=cut
+# end of documentation
+    
+
+
+$num_files = @ARGV;
+if ($opt_m) {
+    @filelist = @ARGV;
+    &multiadd();
+    exit();
+}
+if ($num_files > 2) {
+    print "Cannot take more than two files.\n";
+    &bail();
+}
+
+# read in the files
+$first = 1;
+foreach $file (@ARGV) {
+    &read_a_file();
+    if ($first) {
+	@fcolumn = @column;
+	$first = 0;
+    }
+}
+
+
+if ($opt_n) {    # we have only one file and a constant
+    for ($i = 0; $i < $num_points; $i++) {
+	$res = $fcolumn[$i] + $opt_n if ($opt_A);
+	$res = $fcolumn[$i] - $opt_n if ($opt_S);
+	$res = $fcolumn[$i] * $opt_n if ($opt_M);
+	$res = $fcolumn[$i] / $opt_n if ($opt_D);
+	print "$res\n";
+    }
+} else {
+    for ($i = 0; $i < $num_points; $i++) {
+	$res = $column[$i] + $fcolumn[$i] if ($opt_A);
+	$res = $fcolumn[$i] - $column[$i] if ($opt_S);
+	$res = $column[$i] * $fcolumn[$i] if ($opt_M);
+	$res = $fcolumn[$i] / $column[$i] if ($opt_D);
+	print "$res\n";
+    }
+}
+
+
+sub read_a_file {
+#    print "Reading from $file ...\n";
+    open IN, "<$file";
+    chomp($in = <IN>);
+    $in =~ s/^\s+//s;
+    @in = split /\s+/, $in;
+    $num_cols = @in;
+    $col = $opt_c - 1;
+    $num_cols--;
+    
+    @column = ($in[$col]);
+    while ($in = <IN>) {
+	$in =~ s/^\s+//s;
+	@in = split /\s+/, $in;
+	@column = (@column, $in[$col]);
+    }
+    close IN;
+    $num_points = @column;
+}
+
+
+
+sub multiadd {
+    # read the first file
+    $file = shift @filelist;
+    &read_a_file;
+    @res = @column;
+    foreach $file (@filelist) {
+	&read_a_file;
+	for ($i = 0; $i < $num_points; $i++) {
+	    $res[$i] += $column[$i];
+	}
+    }
+    for ($i = 0; $i < $num_points; $i++) {
+	print "$res[$i]\n";
+    }
+}
+	
+
+sub bail {
+    print "Try 'perldoc add2files' for more information.\n";
+    exit(0);
+}
+
+

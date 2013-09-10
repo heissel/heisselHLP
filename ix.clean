@@ -1,0 +1,338 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+
+my (@sving, @a_sin, @a_cos);
+my $max_iter = 300;
+$topi = 6.283185307;
+
+getopts('t:os') || &bail;          # $opt_t is tolerance
+                                   # $opt_o means complete only once
+                                   # $opt_s saves the first instance of input.dat after
+                                   #    removal of pt-pt offsets and exits
+if ($opt_t) {$tol = $opt_t;}
+#($tol) = @ARGV if (defined(@ARGV));  
+
+# begin documentation
+=pod
+
+=head1 ix.clean
+
+=head2 Syntax
+
+ix.clean [B<-t> I<tol>] [B<-o>] [B<-s>]
+
+=head2 Options
+
+=over 3
+
+=item B<-c> I<tol>
+
+The accuracy required. Defaults to 0.1 times the number of frequencies.
+
+=item B<-o>
+
+Complete only once, ie. after first subtraction of all frequencies without iteration.
+
+=item B<-s>
+
+Exit after removal of night-night offsets. F<input.dat> written.
+
+=back
+
+=head2 Required files
+
+F<freq.inp> with the frequencies in microHz to be removed (one line).
+
+F<eq> with the values (single column)
+
+F<time.sec> with the time in seconds (single column)
+
+Optional: F<pts.night> will cause the zero level adjustments to be done in subintervals.
+
+=head2 Description
+
+Performs iterative calculation of amplitudes and phases for the frequencies given in 
+F<freq.inp>, which are then subtracted from the time series. Outputs file F<clean.log>
+with the results, as well as F<input.dat> which holds the cleaned time series (two 
+columns: value, time).
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+# end of documentation
+
+
+
+
+$home_dir = `pwd`;
+chomp($home_dir);
+print "Running at $home_dir\n";
+
+
+# inlaes kendte frekevnser. disse er faste vaerdier i microHz!
+
+open(FRQ,"freq.inp");
+chomp($frq = <FRQ>);
+@frq = split(/\s+/,$frq);
+close(FRQ);
+$antal_frq = @frq;
+
+# amplituderne saettes til 0 fra starten
+
+for ($num_frq = 0; $num_frq <= $antal_frq - 1; $num_frq++) {
+    $a_sin[$num_frq] = 0;
+    $a_cos[$num_frq] = 0;
+}
+
+# indlaes tider og den originale tidsserie
+
+open(TIME,"time.sec");
+chomp(@t = <TIME>);
+close(TIME);
+
+open(EQW,"eq");
+chomp(@eq = <EQW>);
+close(EQW);
+
+$antal = @eq;
+$mean = sum(@eq)/$antal;
+
+
+# hvis midles hver nat for sig? saa indlaes antal pkt per nat.
+if (-e "pts.night") {
+
+    print "Removing night-night offsets:\n";
+    open(PTN,"pts.night");
+    chomp(@ptsnight = <PTN>);
+    close(PTN);
+    $n_nights = @ptsnight;
+    $nightsum = 0;
+
+    for ($ni = 0; $ni <= $n_nights - 1; $ni++) {
+	print "  Night ";
+	print $ni + 1;
+	print " with $ptsnight[$ni] points. Mean is "; 
+	$untill = $nightsum + $ptsnight[$ni] - 1;
+	@e_tmp = @eq[$nightsum..$untill];
+	$n_mean = sum(@e_tmp) / $ptsnight[$ni];
+	print "$n_mean.\n";
+
+	for ($i = 0; $i <= $ptsnight[$ni] - 1; $i++) {
+	    $e_tmp[$i] *= $mean / $n_mean;
+	    @neweq = (@neweq, $e_tmp[$i]);
+	}
+
+	$nightsum += $ptsnight[$ni];
+
+    }
+
+    $tmp_pts = @neweq;
+    print "$nightsum points in total.\n";
+    @eq = @neweq;
+
+}
+
+$newmean = sum(@eq) / $antal;
+print "  old mean: $mean\n";
+print "  new mean: $newmean\n";
+
+open(LOG,">clean.log");
+print "$antal punkter med middel = $mean. $antal_frq frekvenser.\n";
+print LOG "$antal punkter med middel = $mean. $antal_frq frekvenser.\n";
+
+if ($opt_s) { # very first one and save-parameter set
+    skriv_tidsserie(@eq);
+    print "\nExiting here after removing pt-pt offsets\n";
+    exit;
+}
+
+# start iterationerne fra nr 1 og fortloebende. $ask er et flag der
+# genererer en forespoergsel hvis der fortsaettes en signifikant fraktion
+# af max_iter, med mulighed for afbrydelse.
+
+$iter = 1;
+$ask = 1;
+unless ($tol) {  # hvis vi ikke har indlaest en tolerance, saa udregn en.
+    $tol = 0.1 * $antal_frq;
+}
+
+# for hver af de faste frekvenser udregnes amplituderne med
+# alle de andre svingninger fratrukket. Dette fortsaettes indtil
+# konvergens, eller indtil max tilladte iterationer overskrides.
+$notfirst = 0;
+ITERATE:
+    do {
+	print "Gennemloeb nr. $iter\n";
+	print LOG "Gennemloeb nr. $iter\n";
+	
+	for ($num_frq = 0; $num_frq <= $antal_frq - 1; $num_frq++) {
+	    print "Frekvens nr.";
+	    print $num_frq + 1;
+	    print ": $frq[$num_frq]\n";
+	    
+	    ny_tidsserie(1);
+	    
+	    skriv_tidsserie(@neq);
+	    
+
+	    run_turbo($frq[$num_frq]-0.00001,$frq[$num_frq]+0.00001,2);
+	    
+	    ($a_sin[$num_frq], $a_cos[$num_frq]) = amplitude();
+	    print "I found a_sin=$a_sin[$num_frq] and a_cos=$a_cos[$num_frq]\n";
+	    
+	}
+	
+	$scat_test = find_scat($iter - 1);
+	$iter++;
+	print "Scatter: $scat_test\n\n";
+	
+	if ($ask && $iter > $max_iter/3) {
+	    close LOG;
+	    print "Warning: you may be cycling back and forth between two stable solutions.\n";
+	    print "Please check 'clean.log' to see if this is the case, and decide whether\n";
+	    print "you wish to abort or continue: ";
+	    $abort = <STDIN>;
+	    if ($abort =~ /^[Aa]/) {
+		$ask = -1;
+		last ITERATE;
+	    }
+	    $ask = 0;
+	    open LOG, ">>clean.log";
+	}
+    } until ((($scat_test <= $tol && $iter > 2) || $iter > $max_iter) || $opt_o);
+# end of ITERATE
+
+# saa er vi faerdige. Lukker log-filen og skriver en warning hvis vi stoppede
+# p.g.a. for mange iterationer.
+
+close(LOG) if $ask;
+
+
+if ($iter > $max_iter || $ask == -1) {
+    print "Warning: too many iterations.\nAmplitudes considered stable. Subtracting.\n";
+} else {
+    print "Amplitudes are stable. Subtracting.\n";
+}
+
+# genererer en ny tidsserie og skriver den til filen.
+# stopper saa paa en nogenlunde paen maade.
+
+ny_tidsserie(0);
+skriv_tidsserie(@neq);
+print "Done cleaning\n";
+    exit;
+
+################ END OF MAIN ########################
+{ # denne del af koden glemmer vi lige...
+    run_turbo(120,560,1000);
+    rename("input.dat","input_cleaned.dat") || die "err rename input: $!";
+    rename("power.dat","power_cleaned.dat") || die "err rename power: $!";
+    skriv_tidsserie(@sving);
+    run_turbo(120,560,1000);
+}
+
+
+
+############ SUBROUTINES, FUNCTIONS ##################
+
+sub find_scat {
+    $scat=0;
+    if ($_[0]) {
+	for ($i=0; $i <= $antal_frq-1; $i++) {
+	    $scat += (($a_sin[$i]-$old_s[$i])**2+($a_cos[$i]-$old_c[$i])**2);
+	}
+	$scat=sqrt($scat);
+    } else {
+	$scat=$tol+1;
+    }
+    @old_s=@a_sin;
+    @old_c=@a_cos;
+    return $scat;
+}
+
+
+
+sub skriv_tidsserie {
+    my (@q)=@_;
+    open(DATA,">input.dat") || die "cannot open input.dat";
+    for ($i=0; $i<$antal; $i++) {
+	print DATA "$q[$i]   $t[$i]\n";
+    }
+    close(DATA);
+}
+
+
+sub ny_tidsserie {
+# kaldes med argument 0: fratraekker alle frekvenser
+# kaldes med argument 1: fratraekker alle undtagen aktuelle frekvens.
+    my ($num);
+    print "  Udregner nye tidsserie\n";
+    for ($i=0; $i<$antal; $i++) {
+	$ampsum=0;
+	for ($num=0; $num <= $antal_frq-1; $num++) {
+	    unless ($num==$num_frq && $_[0]) {
+		$ampsum += $a_sin[$num]*sin($topi*$frq[$num]*$t[$i]/10**6);
+		$ampsum += $a_cos[$num]*cos($topi*$frq[$num]*$t[$i]/10**6);
+	    }
+	}
+	$neq[$i]=$eq[$i]-$mean*$ampsum/10**6;
+	$sving[$i]=$mean*($ampsum/10**6+1.0);	
+    }
+}
+
+
+
+
+sub amplitude {
+    my ($sin,$cos);
+    my ($sum,$dum,$scat1,$sin1,$cos1,$turn);
+    $cos=0;
+    $sin=0;
+    open(POW,"extra.dat") || die "no extra.dat - version mismatch?";
+    $turn=1;
+    while (chomp($line=<POW>)) {
+	($dum,$sin1,$cos1,$scat1)=split(/\s+/,$line);
+	if ($turn==1 || $turn==3) {
+	    $sin+=$sin1;
+	    $cos+=$cos1;
+	}
+	$turn++;
+    }
+#    print "\n\n$sin, $cos\n";
+    $sin /= 2.0;
+    $cos /= 2.0;
+#    print "\n$sin, $cos\n"; die "stop #2";
+    $sum=sqrt($cos**2+$sin**2);
+    print "   Amplitude ved $frq[$num_frq]: $sum\n";
+    print LOG "   Amplitude ved $frq[$num_frq]: $sum ";
+    print LOG "($sin,$cos)\n";
+    return ($sin,$cos);
+}
+    
+
+
+
+sub run_turbo {
+    my ($low,$hig,$pkt);
+    ($low,$hig,$pkt)=@_;
+    open(TURBO,"|/home/tdall/Oldstuff/HansPOW/a.out") || die "no HansPOW!";
+    print TURBO "$low\n$hig\n$pkt\n";
+    close(TURBO);
+}
+
+
+sub sum {  # summerer et givet array
+    use strict;
+    my($sum,$e);
+    $sum=0;
+    foreach $e (@_) {
+        $sum += $e;
+    }
+    return $sum;
+}
+
+

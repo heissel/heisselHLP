@@ -1,0 +1,51 @@
+#!/usr/bin/perl  -w
+#use diagnostics;
+#use warnings;
+use Getopt::Std;
+
+# reads the Ix outputfile given on the command line and outputs it again
+# with one line per data point. Must give a new name for them also on command line.
+
+my $line1 = "";
+my $line2 = "";
+
+getopts('t:');
+                  # -t file     :   file with times. To be pasted as first column
+
+if (@ARGV) {      # must be given two filenames
+    ($infile, $outfile) = ($ARGV[0], $ARGV[1]);    # ignores any additional names
+} else {
+    &bail();
+}
+
+# if there is a time-file, open it
+if ($opt_t) {
+    open TIME, "<$opt_t"         || die "Error opening $opt_t.\n";
+}
+
+# open the two files. Read two lines at a time and print them as one.
+open IN,  "<$infile"             || die "Error opening $infile.\n";
+open OUT, ">$outfile"            || die "Error opening $outfile\n";
+
+while ( $line1 = <IN> ) {           # as we still have (double-)lines in original file...
+    chomp $line1;
+    chomp( $line2 = <IN> );
+    if ($opt_t) {                   # prepend the time, if present
+	chomp( $time = <TIME> );
+	print OUT "$time  $line1 $line2\n";
+    } else {
+	print OUT "$line1 $line2\n";
+    }
+}
+
+close IN;
+close OUT;
+
+close TIME if $opt_t;
+
+
+sub bail {
+    # extra error comforting remarks to go here
+    exit(0);
+}
+

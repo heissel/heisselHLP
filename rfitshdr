@@ -1,0 +1,180 @@
+#!/usr/bin/perl
+
+use Getopt::Std;
+#use strict 'vars';
+
+my $max_length = 12;  # must correspond to the values in subroutine add_spaces().
+my (
+    %value,
+    @intohash, @keyword, @line,
+    $key, $in, $fullline, $noparamfile,
+    );
+
+getopts('acfF:') || &bail;          # $opt_a means print all fields
+                                 # $opt_f prints also original filename for each file
+                                 # $opt_F is alternative to param.info
+                                 # $opt_c means prompts for fields
+# begin documentation
+=pod
+
+=head1 rfitshdr
+
+extracts parameters from FITS headers
+
+=head2 Syntax
+
+rfitshdr [-a] F<files>
+
+=head2 Required files
+
+F<param.info>
+
+=head2 Description
+
+Given a list of F<files>, B<rfitshdr> extracts parameters from the header part of FITS
+images and prints it to standard output, one row per file. The parameter keywords (or parts
+thereof; must be unique) are given in the file F<param.info> along with a descriptor, which
+is the headline under which
+the values should be printed.
+
+Here is an example of a F<param.info>:
+C<
+    FILENAME Filename
+    TM_START start_time
+    TM_END end_time
+>
+Note that the descriptor must be one word, so use underscore (_) for spaces.
+
+If no F<param.info> is present or if option -a is given B<rfitshdr> will print all the header to
+standard output.
+
+=head2 Status
+
+11-10-2000: Ability to print entire header added.
+
+06-07-2000: POD created. Working version, but unflexible with regard to the length of 
+the descriptors. Current (arbitrary) limit is 9 characters.
+
+=cut
+# end of documentation
+    
+sub bail {
+    print "\nperldoc rfitshdr\n\nfor more information.\n";
+    exit(0);
+}
+
+unless (@ARGV) {   # must be given list of files to read from
+    print "No files given!\n";
+    bail();
+}
+
+if ($opt_F) {
+    $infofile = $opt_F;
+} else {
+    $infofile = "param.info";
+}
+
+$noparamfile = 0;
+if (-e $infofile) {
+    open PAR, "$infofile" || die "Could not open $infofile\n";
+    while ( chomp($key = <PAR>) ) {  # read each line of the file and split it into a key and a value
+	chomp($value = <PAR>);
+	$value{$key} = $value;
+    }
+    close PAR;
+} else {
+    print "Parameter file is missing!\n";
+    if ($opt_c) {  # prompt me for parameters
+	print "Field keyword: "; chomp($key = <STDIN>);
+	while ( $key =~ /\w/ ) {
+	    print "Heading: "; chomp($value = <STDIN>);
+	    $value{$key} = $value;
+	    print "Field keyword: "; chomp($key = <STDIN>);
+	}
+    } else {
+	$noparamfile = 1;
+    }
+}
+
+if ($opt_a) {
+    $noparamfile = 1;
+}
+if ($opt_f && $noparamfile == 0) {   # print also original filename for each entry
+    $value{"_DUMMY"} = "File";
+} 	
+
+@keyword = keys %value;  # the keywords we are looking for 
+
+add_spaces();
+@line = values %value;
+print "@line\n";
+erase_values();
+
+foreach (@ARGV) {     # open the file and read it line by line, looking for the right keyword
+    open IN, "<$_";
+  TAKE_HEAD:while( $fullline = <IN> ) {  # the FITS headers are one line consisting of 80-character chuncks
+
+      if ($opt_f) {
+	  $value{"_DUMMY"} = $_;  # store the filename
+      }
+# separate one chunk
+# if matches END then do so
+# go through the keys 
+
+    TAKE_LINE: while ($fullline) {     # while we have content left
+	$in = substr $fullline, 0, 80;  
+	$fullline = substr $fullline, 80, 9999999999;
+	if ($in =~ /^END/) { # reached the end of the header part
+	    last TAKE_HEAD;
+	}
+	if ($in !~ /\w/) { 
+	    next TAKE_LINE;
+	}
+	if ($noparamfile) {   # no parametr file so show all fields
+	    print "$in\n";
+	    next TAKE_LINE;
+	}
+      KEY: foreach $key (@keyword) {
+	  if ($in =~ /$key/) {  # we have a hit, now do something with it!
+#	      print "hit: $in\n";
+	      $pos_begin = 1 + index( $in, "=");
+	      $num_char  = 1 + index( $in, "/") - $pos_begin;
+	      $in = substr $in, $pos_begin, $num_char;
+	      $in =~ s/[\s+\/\']//sg;  
+#	      print "in = $in\n";
+	      $value{$key} = $in;
+	      if ($in !~ /[\W\D]/) {
+		  $value{$key} = "--empty--";
+	      }
+#	      last KEY;    # read in the next line
+	      next TAKE_LINE;
+	  }
+      }
+    }
+  }
+    close IN;
+#    foreach (keys %value) {
+#	print "$_ : $value{$_}\n";
+#    }
+#    exit;
+    add_spaces();
+    @line = values %value;  # now the data for this file have been found, so print it
+    print "@line\n";
+    erase_values();
+    
+}
+
+sub add_spaces {
+    foreach $key (@keyword) {   # the numbers should be equal to $max_length!!!
+#	print "$value{$key}   ";
+#	scalar $format = "22.22";
+	$value{$key} = sprintf " %40.40s", $value{$key};
+    }
+}
+
+sub erase_values {
+    foreach $key (@keyword) {
+	$value{$key} ="";
+    }    
+}
+

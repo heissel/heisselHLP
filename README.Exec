@@ -1,0 +1,36 @@
+Short description of programs in this dirctory
+-------------------------------------------------------------
+extracthdr               extracts FITS parameter fields from
+                         text files.
+-------------------------------------------------------------
+rfitshdr                 extracts FITS header fields directly
+                         from the FITS files.
+-------------------------------------------------------------
+irafasc2asc              converts IRAF written text files to 
+                         properly ordered text files.
+-------------------------------------------------------------
+convtim                  makes lists of UT and dates to time
+                         file in seconds.
+-------------------------------------------------------------
+ix.balmer                runs the Ix Balmer line-index software.
+                         Now the new version (Nov.2000)!
+-------------------------------------------------------------
+ix.old_balmer            the old Ix Balmer software.
+-------------------------------------------------------------
+ix.hanspow               runs Hans' sine-wave fitting program 
+                         to produce power spectrum.
+-------------------------------------------------------------
+ix.makedata              makes artificial data/noise series.
+-------------------------------------------------------------
+ix.clean                 finds amplitudes at given set of
+                         frequencies iteratively.
+-------------------------------------------------------------
+ix.extclean              makes files with the frequencies and
+                         amplitudes from clean* files
+-------------------------------------------------------------
+ix.amplfunc              takes ampl* files and creates sorted
+                         columns of mplitude for each frequency
+-------------------------------------------------------------
+findmean                 finds mean and scatter of a column
+                         in a file
+-------------------------------------------------------------

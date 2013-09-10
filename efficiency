@@ -1,0 +1,198 @@
+#!/usr/bin/perl
+
+use Math::Trig;
+use warnings;
+use diagnostics;
+use Getopt::Std;
+
+getopts('d:f:o:');    # -d val   :  range in AA to calculate the mean counts in the spectrum
+                      # -f file  :  produce a file with wavelengths and flux values
+                      # -o file  :  efficiency output file. Default is eff.eff
+
+#     efficiency
+#
+# This program calculates the efficiency using the standard star table and an
+# exposure of the same standard star. Use the program fluxcalib for flux
+# calibration stellar spectra (that are not standard stars)
+
+
+if ($opt_d) {
+    $range = $opt_d / 2.0;
+} else {
+    print "Warning:  -d option not given. Will use default range of 10 Angstrom\n";
+    print "to calculate mean in the spectrum.\n\n";
+    $range = 5.0;
+}
+if ($opt_o) {
+    $eff_name = $opt_o;
+} else {
+    $eff_name = "eff.eff";
+}
+# prompt for the relevant standard star name and read in the file
+#
+#  to get the standard files from MIDAS table to ascii-file:
+#
+# MIDAS> assign/print file hr8634.txt
+# MIDAS> print/tab  /scisoft/midas/calib/data/spec/ctio/hr8634.tbl
+
+print "Standard star name? (lower case) ";
+chomp ($starfile = <STDIN> );
+
+open STAR, "<Calib/$starfile.txt" or die "cannot open. $!";
+$in = <STAR>;
+($d4, $d2) = split / : /, $in;
+print "Standard star file: $d2";
+$in = <STAR>;   # skip table headings
+while ($in = <STAR>) {
+    next if $in =~ /---/;
+    $in =~ s/^\s*//s;
+    ($dum,$lamb, $m_v, $d3, $f_w, $d2, $dum) = split /\s+/, $in;
+#    print "l = $lamb, V = $m_v, dl = $delta_lamb, F_w = $f_w\n";exit;
+    push @lamb, $lamb;
+    push @f_w, $f_w;
+    push @m_v, $m_v;
+#    push @delta, $3;
+}
+$num = @lamb;
+close STAR;
+
+print "The spectrum asked for is the ascii file with header on top.\n";
+print "Spectrum file name? "; chomp ($specname = <STDIN>);
+read_the_ascii();
+
+# prepare output file:
+open EFF, ">$eff_name" or die "Error opening output file. $!";
+print EFF  "lambda[AA]    eff      count rate [/s/nm]\n";
+#print      "lambda[AA]    eff      count rate [/s/AA]\n";
+
+# prepare ascii spectrum file if -f option
+if ($opt_f) {
+    open OUTSPEC, ">$opt_f" or die "could not open $opt_f";
+    print OUTSPEC "$w_start[0]   $in";
+}
+
+$st_val = 1;
+$spec_value[0] = $in;   # came from the subroutine
+$num_in_spec = $pix_per_order;
+
+for ($k = 0 ; $k < $orders ; $k++) {  # calc eff for each order
+    $l_ini = $w_start[$k];
+    $disp = $dsp[$k];
+    @spec_value = ();
+    print "Processing ";
+    for ($j = $st_val ; $j < $pix_per_order ; $j++) {   # read in the full order
+	$spec_value[$j] = <SPEC>;
+	if ($opt_f) {   # print to spectrum file if option -f given
+ 	    $d1 = $l_ini + $j * $disp;
+	    print OUTSPEC "$d1  $spec_value[$j]";
+	}
+    }
+    print "order $k: ";
+    $st_val = 0;   # reset the value for remaning read
+#org    $l_cut = $l_ini + $delta[0];                              # setting lower wavel.limit
+#org    $h_cut = $l_ini + $disp * $num_in_spec - $delta[$num-1];  # setting upper limit
+    $l_cut = $l_ini;
+    $h_cut = $l_ini + $disp * $num_in_spec;
+    print "$l_cut  --  $h_cut\n";
+
+# calculate the constants to use for N_lamb, t_exp, c
+    $hc_e15 = 5.03e-8;
+    $radius_cm = 358.0 / 2.;  #    cm
+    $radius_m  = 3.58 / 2.;   #    m
+    $conv = 1.3;    #   e/ADU
+    if ($h_cut < 100) {$h_cut = 200000.0};
+
+# loop through all the entries in the std.star file 
+
+  LOOP: for ($i = 0 ; $i < $num ; $i++) {
+      if ($lamb[$i] >= $l_cut  &&  $lamb[$i] <= $h_cut) {
+	  # find start and end lambda and integrate real spectrum counts
+#org	  $i_beg = int( ( $lamb[$i] - 5.0 - $l_ini) / $disp ); if ($i_beg < 0) { $i_beg = 0 };
+#org	  $i_end = int( ( $lamb[$i] + 5.0 - $l_ini) / $disp ); if ($i_end > $pix_per_order) { $i_end = $pix_per_order-1 };
+	  $i_beg = int( ( $lamb[$i] - $range - $l_ini) / $disp ); if ($i_beg < 0) { $i_beg = 0 };
+	  $i_end = int( ( $lamb[$i] + $range - $l_ini) / $disp ); if ($i_end > $pix_per_order) { $i_end = $pix_per_order-1 };
+	  $adu = 0.0;
+	  $n_sum = 0;
+	  for ( $j = $i_beg ; $j <= $i_end ; $j++ ) {
+	      $adu += $spec_value[$j];
+	      $n_sum++;
+	  }
+	  $adu = $adu / ( $disp * $n_sum );    # convert to ADU/AA and average over lambda-bin
+	  $adu = -1.0 unless $adu;
+	  $n_l1 = pi * $radius_m**2  * (5.5e10/$lamb[$i]) * 10**(-0.4*$m_v[$i]);
+	  $n_l2 = pi * $radius_cm**2 * $f_w[$i] * $lamb[$i] * $hc_e15;
+	  $e_l = $adu * $conv / ($n_l1 * $t_exp);
+	  $rate = $adu * $conv / $t_exp;
+	  if ($adu > 0.0) {
+	      $dum = abs(  $n_l1/$n_l2 - 1.0 );
+#	      print "$lamb[$i]     $e_l   $rate   --- n_l = $n_l1, diff: $dum\n";
+	      printf EFF "%4d       %6.4f    %7.2f\n", $lamb[$i], $e_l, $rate*10.0;
+	  }
+      }
+  }
+}
+
+close OUTSPEC if $opt_f;
+close SPEC;
+close EFF;
+
+# could meke add-on to take the highest value of all wavelengths to show upper envelope.
+
+system "sort -n $eff_name > tmp.$eff_name";
+open E, "<tmp.$eff_name" or die "fsfsf...";
+open N, ">$eff_name.one" or die "wrwfwfw...";
+$d1 = <E>;    # read dummy line
+$i = 1;
+$in = <E>;
+($lamb_last, $ef_max, $d1) = split /\s+/, $in;
+while ($in = <E>) {
+    ($lamb, $ef_val, $d2) = split /\s+/, $in;
+    if ($lamb == $lamb_last) {
+	$ef_max = $ef_val if ($ef_val > $ef_max);
+	$i++;
+    } else {
+	print N "$lamb_last   $ef_max\n";
+	$i = 1;
+	$lamb_last = $lamb;
+	$ef_max = $ef_val;
+    }
+}
+unlink "tmp.$eff_name";
+
+###############  end of main program  ##########
+
+sub read_the_ascii {
+    open SPEC, "<$specname" || die "cannot open. $!";  # open the spectrum with header
+    $i = 0;
+    while ($in = <SPEC>) {
+
+	if ($in =~ /^NAXIS1/) {   # number of bins in each order
+	    ($d1,$d2,$pix_per_order,$d3) = split /\s+/, $in;
+	}
+	if ($in =~ /^NAXIS2/) {   # number of orders
+	    ($d1,$d2,$orders,$d3) = split /\s+/, $in;
+	}
+	if ($in =~/^EXPTIME/) {   # exposure time
+	    ($d1,$d2,$t_exp,$d3) = split /\s+/, $in;
+	}
+	if ($in =~ /^WAT2/) {   # dispersion info fields
+	    $in =~ /.*\'(.*)\'/;
+	    $disp_list .= $1;
+	}
+	last if $in =~ /^\s+\d/; # this is first value of the data
+    }
+
+    $d1 = substr $disp_list, 0, 17, "";   # chop off the "wtype=multispec " crap
+    for ($i = 0 ; $i < $orders ; $i++) {  
+	$d1 = index $disp_list, "\"";             # extract info for one order at a time
+	$d2 = substr $disp_list, 0, $d1+1, "";
+	$d1 = index $disp_list, "\"";
+	$d2 = substr $disp_list, 0, $d1+1, "";
+	chop $d2;
+	($d1,$d2,$d3,$w_start,$dsp,$d4) = split /\s+/, $d2;
+	@w_start = (@w_start, $w_start);    # starting lambda for this order
+	@dsp = (@dsp, $dsp);                # dispersion for this order
+    }
+}
+
+

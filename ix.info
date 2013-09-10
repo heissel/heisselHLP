@@ -1,0 +1,26 @@
+#!/usr/bin/perl -w
+
+use diagnostics;
+use warnings;
+
+# print the version number of the ix distribution and of the individual
+# elements.
+
+# make it read the $IXDIR variable and read the info from 
+# file $IXDIR/.version
+#
+# make -x so to give "extras" about the updates and versions of the individual modules.
+#
+
+$ix_version = "0.9";
+$up_date = "2002/10/26";
+
+
+
+print "\n      The ix Distribution\n\n";
+print "Current version  : $ix_version\n";
+print "Last update on   : $up_date\n";
+
+
+
+print "\n"; 

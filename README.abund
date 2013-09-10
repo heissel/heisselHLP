@@ -1,0 +1,19 @@
+System Requirements:
+--------------------
+* perl (surprise!)
+* the following perl modules:
+	- PGPLOT.  Get it from http://cpan.netglobalis.net/modules/by-category/18_Images_Pixmaps_Bitmaps/PGPLOT/
+	- Tk. Get it from http://cpan.netglobalis.net/modules/by-category/08_User_Interfaces/Tk/
+
+The perl module PGPLOT requires that the PGPLOT utilities are installed on your system. If you
+have scisoft installed, then you have PGPLOT as well. Otherwise get it from http://www.astro.caltech.edu/~tjp/pgplot/
+
+
+
+Environment setup:
+------------------
+The following environment variables should be set:
+
+WIDTH9WORK	path to the working directory, where there are subdirectories for 
+		each star (including the reference star). The current model will
+		be in this directory.

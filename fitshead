@@ -1,0 +1,47 @@
+#!/usr/bin/perl  -w
+use diagnostics;
+use warnings;
+
+unless (@ARGV) {      # must be given list of files to read from
+    print "No files given!\n";
+    &bail();
+}
+
+# one FITS header block is 36 lines of 80 chars ie 2880 chars.
+
+foreach (@ARGV) { 
+    open IN, "<$_"             || die "Could not open $_\n";
+    open OUT, ">tmp.$_"        || die "Could not open tmp.$_\n";
+    open HDR, ">hdr.$_"        || die "Could not open hdr.$_\n";
+    $header_written = 0;    # has the header been written yet??
+    $header_part = 1;       # are we still in the header part of the file??
+    $blocks = 0;
+    while ( $fullline = <IN> ) {
+	while ( $header_part ) {
+	    $blocks++;
+	    $header = substr $fullline, 0, 2880 * $blocks; 
+	    if ( $header =~ /END                    / ) {       # full header now in $header
+		print "Header of $blocks blocks!\n";
+		$header_part = 0;
+		$fullline = substr $fullline, 2880 * $blocks;   # part _after_ header in $fullline
+	    } 
+	}
+	unless ( $header_written ) {
+	    print OUT $header;
+	    print HDR $header;
+	    close HDR;
+	    $header_written = 1;
+	}
+	
+	print OUT $fullline;
+    }
+
+    close IN;
+}
+
+
+sub bail {
+    # extra error comforting remarks to go here
+    exit(0);
+}
+

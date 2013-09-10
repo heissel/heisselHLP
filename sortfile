@@ -1,0 +1,96 @@
+#!/usr/bin/perl 
+#-w
+
+use Getopt::Std;
+#use strict 'vars';
+
+
+getopts('c:') || &bail;          # $opt_c is coulumn number to be sorted after
+
+
+# begin documentation
+=pod
+
+=head1 ix.sortfile
+
+
+=head2 Syntax
+
+sortfile [B<-c> I<col>] F<files>
+
+=head2 Options
+
+=over 3
+
+=item B<-c> I<col>
+
+=back
+
+=head2 Required files
+
+none
+
+=head2 Description
+
+Outputs the lines of multicolumn F<files> to standard output, sorted numerically 
+after column number I<col>.
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+# end of documentation
+    
+sub bail {
+    print "\nperldoc sortfile\n\nfor more information.\n";
+    exit(0);
+}
+
+unless ($opt_c) {   # set to default = 1
+    $opt_c = 1;   
+}
+
+&bail unless (@ARGV);
+
+# read in the file
+foreach (@ARGV) {
+    open IN, "<$_";
+#    chomp($in = <IN>);
+    $in = <IN>;
+    @in = split /\s+/, $in;
+    $num_cols = @in;
+    if ($in[0]) {
+	$col = $opt_c - 1;
+    } else {
+	$col = $opt_c;
+	$num_cols--;
+    }
+    @to_be_sorted = ($in[$col]);
+    $thewhole{$in[$col]} = $in;
+    while ($in = <IN>) {
+	$in =~ tr/^\s+//;
+	@in = split /\s+/, $in;
+	$thewhole{$in[$col]} = $in;   # put into hash, use column to_be_sorted as key
+	@to_be_sorted = (@to_be_sorted, $in[$col]);
+    }
+    close IN;
+
+    @sorted = sort by_number @to_be_sorted;
+
+    foreach (@sorted) {
+	print "$thewhole{$_}";
+    }
+}
+exit(0);
+
+
+sub by_number {
+    if ($a < $b) {
+	return -1;
+    } elsif ($a == $b) {
+	return 0;
+    } elsif ($a > $b) {
+	return 1;
+    }
+}

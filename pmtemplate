@@ -1,0 +1,217 @@
+#!/usr/bin/perl
+#
+# Tom Anderson
+# Mon Jan 20 18:55:15 2003
+#
+# pmtemplate - Program to create an empty perl module
+#
+
+use vars qw($VERSION);
+
+$VERSION='0.01';
+
+use strict;
+use warnings;
+use diagnostics;
+use Getopt::Long;
+use Pod::Usage;
+use POSIX;
+
+my ($opt_help, $opt_man, $opt_versions);
+my $opt_debug = 0;
+my $opt_pkg   = 'My::Module';
+my $opt_descr = 'Module to do something useful';
+my $date      = localtime();
+my $year      = (split ' ',$date)[4];
+
+my $author= "$^O user";
+if ($^O =~ /mswin/i)
+{ 
+  $author= $ENV{USERNAME} if defined $ENV{USERNAME};
+}
+else
+{ 
+  my $userid= POSIX::cuserid();
+  $author = (getpwnam($userid))[6];
+}
+
+GetOptions(
+  'debug=i'   => \$opt_debug,
+  'help!'     => \$opt_help,
+  'man!'      => \$opt_man,
+  'versions!' => \$opt_versions,
+  'pkg=s'     => \$opt_pkg,
+  'descr=s'   => \$opt_descr,
+) or pod2usage(-verbose => 1) && exit;
+
+pod2usage(-verbose => 1) && exit if ($opt_debug !~ /^[01]$/);
+pod2usage(-verbose => 1) && exit if defined $opt_help;
+pod2usage(-verbose => 2) && exit if defined $opt_man;
+
+# # # #
+
+my $template= <<'EOF';
+package MODULE_NAME_TEMPLATE_ITEM;
+#
+# AUTHOR_TEMPLATE_ITEM
+# DATE_TEMPLATE_ITEM
+#
+# MODULE_NAME_TEMPLATE_ITEM - DESCR_TEMPLATE_ITEM
+#
+
+use strict;
+use warnings;
+use diagnostics;
+use Exporter;
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
+
+$VERSION     = '0.01';
+@ISA         = qw(Exporter);
+@EXPORT      = ();
+@EXPORT_OK   = qw(&func1);
+%EXPORT_TAGS = ( DEFAULT => [qw(&func1)],
+                 Both    => [qw(&func1 &func2)]);
+
+sub new
+{
+  my $class = shift;
+  my $arg= shift;
+
+  if (ref $arg  eq 'HASH')
+  {
+    $val = $arg->{val} if defined $arg->{val};
+  }
+  else
+  {
+    die "Missing argument hash";
+  }
+  bless $this, $class;
+  return $this;
+}
+
+sub func1  
+{ 
+  my $this= shift;
+  my $class= ref($this);
+  my ($parm1, $parm2)= @_;
+  return $parm1;
+}
+
+1;
+
+XPODX=pod
+
+XPODX=head1 NAME
+
+MODULE_NAME_TEMPLATE_ITEM - DESCR_TEMPLATE_ITEM
+
+XPODX=head1 SYNOPSIS
+
+    use MODULE_NAME_TEMPLATE_ITEM;
+    my $mm = new MODULE_NAME_TEMPLATE_ITEM ( Arg => 'argval' );
+    print $mm->Arg;
+
+XPODX=head1 ABSTRACT
+
+XPODX=head1 DESCRIPTION
+
+XPODX=head1 METHODS
+
+XPODX=head2 C<new>
+
+The constructor
+
+XPODX=over 4
+
+XPODX=item Arg
+
+Argument
+
+XPODX=back
+
+XPODX=cut
+
+XPODX=head1 SEE ALSO
+
+L<My::Module::Tutorial>, L<perlpod|Pod::perlpod>, L<perlpodspec|Pod::perlpodspec>
+
+XPODX=head1 LICENSE
+
+This software is released under the same terms as perl itself.
+If you don't know what that means visit http://perl.com/
+
+XPODX=head1 AUTHOR
+
+Copyright (C) AUTHOR_TEMPLATE_ITEM YEAR_TEMPLATE_ITEM
+All rights Reserved
+
+XPODX=cut
+
+EOF
+
+# # # #
+
+$template=~ s/DATE_TEMPLATE_ITEM/$date/g;
+$template=~ s/YEAR_TEMPLATE_ITEM/$year/g;
+$template=~ s/MODULE_NAME_TEMPLATE_ITEM/$opt_pkg/g;
+$template=~ s/AUTHOR_TEMPLATE_ITEM/$author/g;
+$template=~ s/DESCR_TEMPLATE_ITEM/$opt_descr/g;
+$template=~ s/XPODX=/=/g;
+print $template;
+
+END{
+  if(defined $opt_versions){
+    print "\n",
+      "  Modules, Perl, OS, Program info:\n",
+      "  Pod::Usage            $Pod::Usage::VERSION\n",
+      "  Getopt::Long          $Getopt::Long::VERSION\n",
+      "  POSIX                 $POSIX::VERSION\n",
+      "  strict                $strict::VERSION\n",
+      "  Perl version          $]\n",
+      "  Perl executable       $^X\n",
+      "  OS                    $^O\n",
+      "  $0\n",
+      "\n\n";
+  }
+}
+
+=head1 TITLE
+
+ pmtemplate
+
+=head1 SYNOPSIS
+
+ pmtemplate --pkg='MyPackage' --descr='Package to do cool OO stuff'
+
+=head1 DESCRIPTION
+
+ This command-line program creates an empty shell of a perl
+ module, much like h2xs -aXn does.  Arguments supply the
+ package name and a one-line description.
+
+=head1 ARGUMENTS
+
+ Place
+ --help        print Options and Arguments
+ --man         print complete man page
+
+=head1 OPTIONS
+
+ --pkg='str'   The name of the package
+ --descr='str' String which is a one-line package description
+ --versions    print Modules, Perl, OS, Program info
+ --debug 0     don't print debugging information (default)
+ --debug 1     print debugging information
+
+=head1 LICENSE
+
+This software is released under the same terms as perl itself.
+If you don't know what that means visit http://perl.com/
+
+=head1 AUTHOR
+
+Copyright (C) Tom Anderson 2003
+All rights reserved
+
+=cut
+

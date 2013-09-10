@@ -1,0 +1,13 @@
+#! /bin/sh
+
+# Assume the current directory contains a vinyl, so find minimum
+# factor and then multiply each song
+
+
+ls *.wav | awk '{print "sox "$1" -e stat -v  "}' > /tmp/sox.sh
+sh /tmp/sox.sh 2> /tmp/factors.txt
+MINVOL=`sort /tmp/factors.txt | head -1`
+echo Minimum factor is $MINVOL
+
+echo Proceeding to normalize volume...
+for f in *.wav; do echo $f; sox -v $MINVOL $f x.wav; \mv x.wav $f; done

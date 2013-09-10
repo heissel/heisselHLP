@@ -1,0 +1,122 @@
+#!/usr/bin/perl
+
+# makes a file named amplfunc.dat: first line:   ampl1   ampl2   ...  value.of.B
+#                                  2nd   line:   ampl1   ampl2   ...  value.of.B
+#                                  ...   line:   ....    ....    ...  .......
+#
+# and a file named phasfunc.dat:   first line:   phas1   phas2   ...  value.of.B
+#                                  2nd   line:   phas1   phas2   ...  value.of.B
+#                                  ...   line:   ...     ....    ...  .......
+#
+# uses 'freq.inp' to take the frequencies, and all files named ampl<B>, which
+# are created by 'extclean.pl'. For the phases it uses files phas<B>.
+
+use Getopt::Std;
+
+bail_out() unless (@ARGV);
+
+getopts('fp') || &bail;          # $opt_f is set if frequencies should be
+                                # written as first line of the file.
+                                 # if opt_p is set the phases are written instead of amplitudes
+$num_of_files = @ARGV;  # files must be specified on the command line!
+
+=pod
+
+=head1 ix.amplfunc
+
+=head2 Syntax
+
+ix.amplfunc [B<-f>] [B<-p>] F<files>
+
+=head2 Options
+
+=over 3
+
+=item B<-f>
+
+First line printed are the frequencies.
+
+=item B<-p>
+
+Extract and print phases instead of amplitudes.
+
+=back
+
+=head2 Required files
+
+F<freq.inp> lists the frequencies for which to extract amplitudes.
+
+=head2 Description
+
+Prints amplitudes or phases to standard output, extracted from the F<files>,
+which must be produced by B<ix.extclean>.
+
+=head2 Status
+
+27-04-2001: POD completed.
+
+=cut
+# read the frequencies to be used.
+
+open FRQ,"freq.inp" || die "Could not find file $!";
+$dummy = <FRQ>;
+@frq = split(/\s+/, $dummy);
+close FRQ;
+
+$num_of_frq = @frq;
+
+if ($opt_f) {
+    for ($i = 0; $i <= $num_of_frq - 1; $i++) {
+	printf "%10.3f ", $frq[$i];
+    }
+    print " <- frequencies\n";
+}
+
+# reverse the list of frequencies, because that's how the ampl_* files were made.
+#print "Taking $num_of_files files.\nFrequencies: @frq\n";
+@frq = reverse @frq;
+
+foreach (@ARGV) {
+# read each file, the lines are:   freq.value   amplitude.value   phase.value  b.value
+# and there are as many lines as there are frequencies.
+    open AMP,"$_";
+    @dummy = <AMP>;
+    close AMP;
+
+    for ($i = 0; $i <= $num_of_frq - 1; $i++) {
+	@amp = split(/\s+/, $dummy[$i]);
+	unless ($i) { 
+	    @thisline = ($amp[3]);     # first item on line is value of B
+	}
+	# by unshift-ing it, we get the elements in the right order,
+	# consistent with 'freq.inp'
+
+	if ($opt_p) {  # phases
+	    unshift @thisline, $amp[2];
+	} else {       # amplitudes  
+	    unshift @thisline, $amp[1];
+	}
+    }
+    
+# print the line to the output file in a formatted way
+
+    for ($i = 0; $i <= $num_of_frq - 1; $i++) {
+	if ($opt_p) {  # formatted output for phases
+	    printf "%10.5f ", $thisline[$i];
+	} else {       # format for amplitudes
+	    printf "%10.3f ", $thisline[$i];
+	}
+    }
+    print " $thisline[$num_of_frq]\n";  # the B value last and a newline
+}
+
+#close OUT;
+
+
+
+sub bail_out {
+    print "\nUsage:  ix.amplfunc <files>";
+    print "         Takes files 'ampl<B> OR 'phas<B>' as input. Also requires\n";
+    print "         the existence of 'freq.inp'\n";
+    exit;
+}

@@ -1,0 +1,220 @@
+#!/usr/bin/perl
+
+use Getopt::Std;
+
+# program to decorrelate data against external parameters.
+
+getopts('c:pn:');            
+                            # $opt_c gives the significant correlation
+                            # $opt_p means take par-file names from the file
+                            # $opt_n means normalize to 100.0
+# begin documentation
+=pod
+
+=head1 ix.decor
+
+
+=head2 Syntax
+
+ix.decor [B<-c> I<corr>] [B<-p>] [B<-n> I<new_mean>] F<par_files>
+
+=head2 Description
+
+Tests the single-column file F<eq> for correlations with the single-column files F<par_files>
+and subtracts a simple linear fit, if the correlation is significant. Prints the corrected values to standard
+output.
+
+=head2 Options
+
+=over 3
+
+=item B<-c> I<corr>
+
+Optional. The significant correlation: if a correlation greater than I<corr> is found it will be corrected for.
+Defaults to 0.1 if not given.
+
+=item B<-p> 
+
+Optional. Causes the names of the parameter files to be taken from the file F<names.dek>.
+
+=item B<-n> I<new_mean>
+
+Optional. Causes the output to be normalised to the value I<new_mean>.
+
+=back
+
+=head2 Required files
+
+F<eq> which contains the measurements in a single column.
+
+Note that if the file F<pts.night>, containing the number of data points per night, 
+is present then the
+decorrelation will be performed for each night separately. 
+
+=head2 Status
+
+POD added 20-03-2001.
+Fully operational as of February 2001.
+
+=cut
+# end of documentation
+
+my $corr_default = 0.1; 
+
+if ($opt_c) {
+    $corr_limit = $opt_c;
+} else {
+    $corr_limit = $corr_default;
+}
+
+# read data file
+
+open DATA, "<eq" || die "No data file; eq\n";
+chomp(@data = <DATA>);
+close DATA;
+$total = @data;
+
+# if pts.night exist then perform decorrelation separately
+
+if (-e "pts.night") {
+    open PTS, "<pts.night" || die "access error pts.night\n";
+    @pts_night = <PTS>;
+    close PTS;
+} else {
+    @pts_night = (scalar @data);
+}
+$nights = @pts_night;
+
+# read parameter files
+
+if (-e "names.dek" && $opt_p) {   # take them from a file or...
+    open PARLIST, "<names.dek" || die "no names.dek\n";
+    chomp(@parlist = <PARLIST>);
+    close PARLIST;
+} elsif (@ARGV) {                # from command line
+    @parlist = @ARGV;
+} else {
+    print "No parameter files?\n";
+    exit(0);
+}
+
+
+$w = 0;
+foreach (@parlist) {
+    open PAR, "<$_" || die "no such par-file\n";
+    @par = <PAR>;
+    $parmean = sum(@par) / $total;
+    for ($i = 0; $i < $total; $i++) {
+	$par[$i] -= $parmean;
+    }
+    $ref[$w] = [@par];   # anonymous array
+    close PAR;
+    $w++;
+}
+
+# loop; for each parameter file subtract correlation
+$w = 0;
+foreach (@parlist) {
+    @par = @{$ref[$w]};
+    $pos = 0;
+    print "Now decorrelating $_.\n";
+    for ($j = 0; $j < $nights; $j++) {
+	$n = $j + 1;
+	print "Night number $n: ";
+	&correlate;
+	print "Pearson R = $pearson_r. ";
+	if (abs $pearson_r > $corr_limit) {
+	    print "Decorrelating.\n";
+	    for ($i = $pos; $i < $pos+$pts_night[$j]; $i++) {
+#		$data[$i] -= ( $a + $b * $par[$i] );
+		$data[$i] -= $b * $par[$i];
+	    }
+	} else {
+	    print "No correlation!\n";
+	}
+#	print "Function = $b X + $a\n";
+	$pos += $pts_night[$j];
+    }
+    $w++;
+}
+
+if ($opt_n) {   # normalize data 
+    $norm_const = $opt_n;
+    print "\nNormalizing to $norm_const ";
+    $pos = 0;
+    for ($j = 0; $j < $nights; $j++) {
+	$to = $pos + $pts_night[$j] - 1;
+	$mean_d = sum( @data[$pos..$to] ) / $pts_night[$j];
+	for ($i = $pos; $i < $pos+$pts_night[$j]; $i++) {
+	    $data[$i] = $data[$i] * $norm_const / $mean_d;
+	}
+	$pos += $pts_night[$j];
+    }
+    $sig = sigma( $norm_const, @data);
+    print "with sigma = $sig\n";
+}
+
+
+#output corrected data
+
+open OUT, ">eq.new" || die "could not open eq.new\n";
+foreach $data (@data) {
+    print OUT "$data\n";
+}
+close OUT;
+
+exit(0);
+#####################END_OF_MAIN_PROGRAM
+
+#####################SUBROUTIES
+sub correlate {
+    $to = $pos + $pts_night[$j] - 1;
+    $mean_d = sum( @data[$pos..$to] ) / $pts_night[$j];
+    $mean_p = sum( @par[$pos..$to] ) / $pts_night[$j];
+    $xy = 0;
+    $xx = 0;
+    $yy = 0;
+    for ($k = $pos; $k < $pos+$pts_night[$j]; $k++) {
+	$xy += ( $data[$k] - $mean_d ) * ( $par[$k] - $mean_p );
+	$xx += ( $par[$k] - $mean_p )**2;
+	$yy += ( $data[$k] - $mean_d )**2;
+    }
+
+    $pearson_r = $xy / sqrt ($xx * $yy);
+
+    # just for testing now.
+    $b = 0.0;
+    $st2 = 0.0;
+    for ($k = $pos; $k < $pos+$pts_night[$j]; $k++) {
+	$t = $par[$k] - $mean_p;
+	$st2 += $t**2;
+	$b += $t * $data[$k];
+    }
+    $b /= $st2;
+    $a = ( $mean_d - $mean_p * $b )
+
+}
+
+sub sigma {  # finder rms scatter af et givet array, givet en middelvaerdi
+    use strict;
+    my($sig,$mean,$num);
+    $mean = shift;
+    $sig = 0.0;
+    $num = 0;
+    foreach (@_) {
+	$sig += $_**2;
+	$num += 1;
+    }
+    $sig = ( $sig / $num - $mean**2 )**.5;
+    return $sig;
+}
+
+sub sum {  # summerer et givet array
+    use strict;
+    my($sum,$e);
+    $sum=0;
+    foreach $e (@_) {
+        $sum += $e;
+    }
+    return $sum;
+}

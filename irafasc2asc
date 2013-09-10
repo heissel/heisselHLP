@@ -1,0 +1,132 @@
+#!/usr/bin/perl -w
+
+# will turn iraf-outputted ascii files into the chosen format
+#
+# usage:
+#      irafasc2asc.pl -o nn -p nn [-f namelist] filenames
+# command line arguments are:
+#     -o <num of orders>
+#     -p <pixels per order>
+#     -f <file with list of resulting filenames> (optional)
+#     -c crop_at_beginning:crop_at_end
+#
+
+my(
+   @data,
+   @namelist,
+   $nolist, $n_names, $oldfile, $newfile,
+   $i, $j,
+   );
+
+use Getopt::Std;
+
+getopts('o:p:f:c:') || &bail;
+                       # $opt_o is number of orders
+                       # $opt_p is pixels per order
+                       # $opt_f contains (maybe) filename
+                       # $opt_c is number of pixels to crop (2 numbers)
+# begin documentation
+=pod
+
+=head1 irafasc2asc
+
+converts IRAF ascii files into properly ordered ascii files
+
+=head2 Syntax
+
+irafasc2asc B<-o> I<n> B<-p> I<n> [B<-f> F<output_file_list>] [B<-c> I<crop_beg>:I<crop_end>] F<input_files> 
+
+=head2 Options
+
+=over 3
+
+=item B<-o> I<n>
+
+The number I<n> of columns wanted in the output files.
+
+=item B<-p> I<n>
+
+The length I<n> of each column in the output files (before cropping. See -c option).
+
+=item B<-f> F<output_file_list>
+
+Optional argument specifying a file from which to take the names of the 
+output files produced. If not given the ouput files will be the names of the input
+files with a F<.asc> extension.
+
+=item B<-c> I<crop_beg>:I<crop_end>
+
+Optional argument. Specifies (integer number) how many pixels to crop from the
+beginning and end of each order.
+
+=back
+
+=head2 Description
+
+Takes ascii input from F<input_files> and writes the data to new files in a format
+specified by the command line arguments. 
+
+=head2 Status
+
+POD created on 03-07-2000. 
+
+=cut
+# end of documentation
+
+&bail unless ($opt_o && $opt_p);    # error checking
+
+if ($opt_f) {         # if given a file, read list of names
+    open NAMELIST, "<$opt_f";
+    @namelist = <NAMELIST>;
+    $n_names = @namelist;
+} else {              # if not given, create one
+    print "No list given. Output files will be <input>.asc\n";
+    $nolist = 1;      # setting a flag for traversal of @ARGV
+}
+
+@crop = (0, 0);       # defaults if we are not going to crop
+if ($opt_c) {         # are we going to crop the orders?
+    @crop = split /:/, $opt_c;
+}
+
+
+foreach $oldfile (@ARGV) {
+    open FILE, "<$oldfile" || die "Could not open $oldfile\n";
+    while (<FILE>) {
+	push @data, split;
+    }
+    close FILE || die "Could not close $oldfile\n";
+    if ($nolist) {
+	$newfile = "$oldfile.asc";
+    } else {
+	$newfile = shift @namelist;
+    }
+    open NEW, ">$newfile" || die "Could not open file: $newfile\n";
+    for ($j = 0 + $crop[0]; $j <= $opt_p - 1 - $crop[1]; $j++) {
+	for ($i=0; $i<=$opt_o-1; $i++) {
+	    $index = $i * $opt_p + $j;
+	    print NEW sprintf("%-9.9s ", $data[$index]);
+	}
+	print NEW "\n";
+# unless ($j == $opt_p - 1 - $crop[1]);
+    }
+    close NEW || die "Could not close file: $newfile\n";
+    @data = ();              # clears the data-array!
+}
+
+
+
+
+sub bail {
+    print "\n\nirafasc2asc -o nn -p nn [-f namelist] [-c c1:c2] filenames\n";
+    print "...or\nperldoc irafasc2asc\n";
+    exit();
+}
+
+
+
+
+
+
+
+

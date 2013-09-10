@@ -1,0 +1,63 @@
+% LaTeX document produced by pod2latex from "/usr/users/tdall/Prog/Execs/ix.clean.pod".
+% The followings need be defined in the preamble of this document:
+%\def\C++{{\rm C\kern-.05em\raise.3ex\hbox{\footnotesize ++}}}
+%\def\underscore{\leavevmode\kern.04em\vbox{\hrule width 0.4em height 0.3pt}}
+%\setlength{\parindent}{0pt}
+
+\section{/USR/USERS/TDALL/PROG/EXECS/IX.CLEAN}%
+\index{/USR/USERS/TDALL/PROG/EXECS/IX.CLEAN}
+
+\subsection*{ix.clean}%
+\index{ix.clean}
+
+\subsubsection*{Syntax}%
+\index{Syntax}
+
+ix.clean {\tt [}{\bf -t} {\em tol\/}{\tt ]} {\tt [}{\bf -o}{\tt ]} {\tt [}{\bf -s}{\tt ]}
+
+\subsubsection*{Options}%
+\index{Options}
+
+\begin{description}
+
+\item[{\bf -c} {\em tol\/}]%
+\index{-c tol@{\bf -c} {\em tol\/}}%
+\hfil\\
+The accuracy required. Defaults to 0.1 times the number of frequencies.
+
+\item[{\bf -o}]%
+\index{-o@{\bf -o}}%
+
+Complete only once, ie. after first subtraction of all frequencies without iteration.
+
+\item[{\bf -s}]%
+\index{-s@{\bf -s}}%
+
+Exit after removal of night-night offsets. {\em input.dat\/} written.
+
+\end{description}
+
+\subsubsection*{Required files}%
+\index{Required files}
+
+{\em freq.inp\/} with the frequencies in microHz to be removed (one line).
+
+{\em eq\/} with the values (single column)
+
+{\em time.sec\/} with the time in seconds (single column)
+
+Optional: {\em pts.night\/} will cause the zero level adjustments to be done in subintervals.
+
+\subsubsection*{Description}%
+\index{Description}
+
+Performs iterative calculation of amplitudes and phases for the frequencies given in 
+{\em freq.inp\/}, which are then subtracted from the time series. Outputs file {\em clean.log\/}
+with the results, as well as {\em input.dat\/} which holds the cleaned time series (two 
+columns: value, time).
+
+\subsubsection*{Status}%
+\index{Status}
+
+27$-$04-2001: POD completed.
+
